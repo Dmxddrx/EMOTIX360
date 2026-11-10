@@ -94,6 +94,9 @@ constexpr int16_t DIAGONAL_THRESHOLD = 9000;
 
 uint8_t currentDisplayRotation = 0;
 
+// Private OLED rendering function.
+void update(const Status &status);
+
 
 /*
  * Detect device position using stationary gravity direction.
@@ -864,7 +867,7 @@ void drawPortraitImuPage(const Status &status)
     MPU6050::Data imu;
 
     if (!MPU6050::getData(imu)) {
-        // Display unavailable sensor data.
+        drawCenteredText("NO SENSOR DATA", 40, 1);
         return;
     }
 
@@ -1025,6 +1028,12 @@ bool startTask()
 // ------------------------------------------------------------
 // UPDATE DISPLAY STATUS
 // ------------------------------------------------------------
+void notifyDisplayUpdate()
+{
+    if (oledTaskHandle != nullptr) {
+        xTaskNotifyGive(oledTaskHandle);
+    }
+}
 
 void setStatus(const Status &status)
 {
@@ -1043,6 +1052,107 @@ void setStatus(const Status &status)
     xSemaphoreGive(statusMutex);
 
     requestUpdate();
+}
+
+void setNetworkStatus(
+    bool wifiConnected,
+    bool ntpSynced,
+    const char *ipAddress
+)
+{
+    if (xSemaphoreTake(statusMutex, portMAX_DELAY) != pdTRUE) {
+        return;
+    }
+
+    currentStatus.wifiConnected = wifiConnected;
+    currentStatus.ntpSynced = ntpSynced;
+
+    snprintf(
+        currentStatus.ipAddress,
+        sizeof(currentStatus.ipAddress),
+        "%s",
+        ipAddress != nullptr ? ipAddress : "-"
+    );
+
+    xSemaphoreGive(statusMutex);
+
+    notifyDisplayUpdate();
+}
+
+void setPowerStatus(
+    bool externalPower,
+    int batteryPercent
+)
+{
+    if (xSemaphoreTake(statusMutex, portMAX_DELAY) != pdTRUE) {
+        return;
+    }
+
+    currentStatus.externalPowerPresent = externalPower;
+    currentStatus.batteryPercent = batteryPercent;
+
+    xSemaphoreGive(statusMutex);
+
+    notifyDisplayUpdate();
+}
+
+void setClockStatus(
+    const struct tm &time,
+    bool valid
+)
+{
+    if (xSemaphoreTake(statusMutex, portMAX_DELAY) != pdTRUE) {
+        return;
+    }
+
+    currentStatus.localTime = time;
+    currentStatus.timeValid = valid;
+
+    xSemaphoreGive(statusMutex);
+
+    notifyDisplayUpdate();
+}
+
+void setMPUStatus(
+    bool ready,
+    float pitchDeg,
+    float rollDeg
+)
+{
+    if (xSemaphoreTake(statusMutex, portMAX_DELAY) != pdTRUE) {
+        return;
+    }
+
+    currentStatus.mpuReady = ready;
+    currentStatus.pitchDeg = pitchDeg;
+    currentStatus.rollDeg = rollDeg;
+
+    xSemaphoreGive(statusMutex);
+
+    notifyDisplayUpdate();
+}
+
+void setApplicationStatus(
+    uint8_t page,
+    const char *modeName
+)
+{
+    if (xSemaphoreTake(statusMutex, portMAX_DELAY) != pdTRUE) {
+        return;
+    }
+
+    currentStatus.page = page;
+
+    snprintf(
+        currentStatus.modeName,
+        sizeof(currentStatus.modeName),
+        "%s",
+        modeName != nullptr ? modeName : "EMOTIX360"
+    );
+
+    xSemaphoreGive(statusMutex);
+
+    notifyDisplayUpdate();
 }
 
 
@@ -1216,6 +1326,7 @@ void logMessage(const char *format, ...)
     requestUpdate();
 }
 
+namespace {
 void update(const Status &status)
 {
     if (!displayReady) {
@@ -1289,5 +1400,6 @@ void update(const Status &status)
 
     flushDisplay();
 }
+} // namespace update
 
 } // namespace DisplayManager

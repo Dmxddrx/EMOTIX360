@@ -38,8 +38,6 @@ void requestUpdate();
 void showStartupMessage(const char *message);
 void logMessage(const char *format, ...);
 
-void update(const Status &status);
-
 }
 
 #endif
