@@ -1,20 +1,24 @@
-#include "core/i2c_manager.h"
+#include "i2c_manager.h"
 
-#include "config/pin_config.h"
-#include "config/device_config.h"
+#include "pin_config.h"
+#include "device_config.h"
 
 #include <Wire.h>
+
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 
 namespace I2CManager {
 namespace {
 
+SemaphoreHandle_t busMutex = nullptr;
 bool busReady = false;
 
 }
 
 
 // ------------------------------------------------------------
-// INITIALIZE SHARED I2C BUS
+// INITIALIZATION
 // ------------------------------------------------------------
 
 bool begin()
@@ -23,7 +27,12 @@ bool begin()
         return true;
     }
 
-    // Initialize ESP32-S3 I2C using the configured GPIO pins.
+    busMutex = xSemaphoreCreateMutex();
+
+    if (busMutex == nullptr) {
+        return false;
+    }
+
     busReady = Wire.begin(
         PinConfig::I2C_SDA,
         PinConfig::I2C_SCL,
@@ -31,10 +40,11 @@ bool begin()
     );
 
     if (!busReady) {
+        vSemaphoreDelete(busMutex);
+        busMutex = nullptr;
         return false;
     }
 
-    // Prevent indefinite waiting if an I2C transaction fails.
     Wire.setTimeOut(I2CConfig::TIMEOUT_MS);
 
     return true;
@@ -42,7 +52,7 @@ bool begin()
 
 
 // ------------------------------------------------------------
-// CHECK I2C INITIALIZATION
+// STATUS
 // ------------------------------------------------------------
 
 bool isReady()
@@ -52,19 +62,48 @@ bool isReady()
 
 
 // ------------------------------------------------------------
-// CHECK DEVICE ACKNOWLEDGEMENT
+// BUS SYNCHRONIZATION
+// ------------------------------------------------------------
+
+bool lock(uint32_t timeoutMs)
+{
+    if (!busReady || busMutex == nullptr) {
+        return false;
+    }
+
+    return xSemaphoreTake(
+        busMutex,
+        pdMS_TO_TICKS(timeoutMs)
+    ) == pdTRUE;
+}
+
+
+void unlock()
+{
+    if (busMutex != nullptr) {
+        xSemaphoreGive(busMutex);
+    }
+}
+
+
+// ------------------------------------------------------------
+// DEVICE DETECTION
 // ------------------------------------------------------------
 
 bool isDeviceConnected(uint8_t address)
 {
-    if (!busReady) {
+    if (!lock()) {
         return false;
     }
 
     Wire.beginTransmission(address);
 
-    return Wire.endTransmission() == 0;
-}
+    const bool connected =
+        Wire.endTransmission() == 0;
 
+    unlock();
+
+    return connected;
+}
 
 } // namespace I2CManager

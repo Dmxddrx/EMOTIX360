@@ -1,10 +1,15 @@
-#include "drivers/mpu6050_driver.h"
+#include "mpu6050_driver.h"
 
-#include "core/i2c_manager.h"
-#include "config/device_config.h"
+#include "i2c_manager.h"
+#include "device_config.h"
+#include "pin_config.h"
 
 #include <Wire.h>
 #include <math.h>
+
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/semphr.h>
 
 namespace MPU6050 {
 namespace {
@@ -50,6 +55,25 @@ constexpr uint16_t CALIBRATION_DELAY_MS = 5;
 
 
 // ------------------------------------------------------------
+// FREERTOS CONFIGURATION
+// ------------------------------------------------------------
+
+constexpr uint32_t MPU_TASK_STACK_SIZE = 4096;
+constexpr UBaseType_t MPU_TASK_PRIORITY = 4;
+
+TaskHandle_t mpuTaskHandle = nullptr;
+
+SemaphoreHandle_t dataMutex = nullptr;
+
+
+// ------------------------------------------------------------
+// MPU6050 INTERRUPT REGISTER
+// ------------------------------------------------------------
+
+constexpr uint8_t REG_INT_PIN_CFG = 0x37;
+constexpr uint8_t REG_INT_ENABLE  = 0x38;
+
+// ------------------------------------------------------------
 // DRIVER STATE
 // ------------------------------------------------------------
 
@@ -63,6 +87,9 @@ float gyroBiasX = 0.0f;
 float gyroBiasY = 0.0f;
 float gyroBiasZ = 0.0f;
 
+float filteredRollDeg = 0.0f;
+float filteredPitchDeg = 0.0f;
+
 uint32_t lastSampleMs = 0;
 
 bool filterInitialized = false;
@@ -74,12 +101,20 @@ bool filterInitialized = false;
 
 bool writeRegister(uint8_t reg, uint8_t value)
 {
+    if (!I2CManager::lock()) {
+        return false;
+    }
+
     Wire.beginTransmission(deviceAddress);
 
     Wire.write(reg);
     Wire.write(value);
 
-    return Wire.endTransmission() == 0;
+    const bool success = Wire.endTransmission() == 0;
+
+    I2CManager::unlock();
+
+    return success;
 }
 
 
@@ -93,36 +128,42 @@ bool readRegisters(
     size_t length
 )
 {
-    Wire.beginTransmission(deviceAddress);
+    if (!I2CManager::lock()) {
+        return false;
+    }
 
+    bool success = false;
+
+    Wire.beginTransmission(deviceAddress);
     Wire.write(reg);
 
-    // Repeated start: keep the bus active for the read.
-    if (Wire.endTransmission(false) != 0) {
-        return false;
-    }
+    if (Wire.endTransmission(false) == 0) {
 
-    const size_t received = Wire.requestFrom(
-        deviceAddress,
-        length,
-        true
-    );
+        const size_t received = Wire.requestFrom(
+            deviceAddress,
+            length,
+            true
+        );
 
-    if (received != length) {
+        if (received == length) {
 
-        // Clear any incomplete response.
-        while (Wire.available()) {
-            (void)Wire.read();
+            for (size_t i = 0; i < length; ++i) {
+                buffer[i] = (uint8_t)Wire.read();
+            }
+
+            success = true;
         }
+        else {
 
-        return false;
+            while (Wire.available()) {
+                (void)Wire.read();
+            }
+        }
     }
 
-    for (size_t i = 0; i < length; ++i) {
-        buffer[i] = (uint8_t)Wire.read();
-    }
+    I2CManager::unlock();
 
-    return true;
+    return success;
 }
 
 
@@ -240,6 +281,15 @@ bool begin()
         return false;
     }
 
+    if (dataMutex == nullptr) {
+
+        dataMutex = xSemaphoreCreateMutex();
+
+        if (dataMutex == nullptr) {
+            return false;
+        }
+    }
+
     // Reset previous sensor state.
     latest = Data{};
 
@@ -344,74 +394,89 @@ bool begin()
     return true;
 }
 
+// ------------------------------------------------------------
+// MPU6050 DATA READY ISR
+// ------------------------------------------------------------
+
+// Keep the ISR extremely short.
+//
+// Never perform I2C communication or calculations inside
+// this interrupt.
+
+void IRAM_ATTR mpuDataReadyISR()
+{
+    BaseType_t higherPriorityTaskWoken = pdFALSE;
+
+    if (mpuTaskHandle != nullptr) {
+
+        vTaskNotifyGiveFromISR(
+            mpuTaskHandle,
+            &higherPriorityTaskWoken
+        );
+    }
+
+    if (higherPriorityTaskWoken == pdTRUE) {
+        portYIELD_FROM_ISR();
+    }
+}
+
+// ------------------------------------------------------------
+// MPU6050 FREERTOS TASK
+// ------------------------------------------------------------
+static void processSensorData();
+
+void mpuTask(void *parameter)
+{
+    for (;;) {
+
+        // Sleep until the MPU6050 generates a data-ready interrupt.
+        ulTaskNotifyTake(
+            pdTRUE,
+            portMAX_DELAY
+        );
+
+        // Process one fresh sensor sample.
+        processSensorData();
+    }
+}
 
 // ------------------------------------------------------------
 // UPDATE SENSOR DATA
 // ------------------------------------------------------------
 
-void update()
+static void processSensorData()
 {
-    if (!ready) {
+    Data sample;
+
+    if (!readRaw(sample)) {
+
+        if (xSemaphoreTake(dataMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
+            latest.valid = false;
+            xSemaphoreGive(dataMutex);
+        }
+
         return;
     }
 
     const uint32_t now = millis();
 
-    if ((uint32_t)(now - lastSampleMs) <
-        DeviceConfig::SENSOR_SAMPLE_MS) {
-        return;
-    }
-
-    Data sample;
-
-    if (!readRaw(sample)) {
-
-        latest.valid = false;
-
-        return;
-    }
-
-
-    // --------------------------------------------------------
-    // ACCELEROMETER CONVERSION
-    // --------------------------------------------------------
-
+    // Accelerometer conversion.
     sample.axG = sample.axRaw * ACCEL_SCALE_G;
     sample.ayG = sample.ayRaw * ACCEL_SCALE_G;
     sample.azG = sample.azRaw * ACCEL_SCALE_G;
 
+    // Gyroscope conversion and bias correction.
+    sample.gxDps = (sample.gxRaw - gyroBiasX) * GYRO_SCALE_DPS;
+    sample.gyDps = (sample.gyRaw - gyroBiasY) * GYRO_SCALE_DPS;
+    sample.gzDps = (sample.gzRaw - gyroBiasZ) * GYRO_SCALE_DPS;
 
-    // --------------------------------------------------------
-    // GYROSCOPE CONVERSION AND BIAS CORRECTION
-    // --------------------------------------------------------
-
-    sample.gxDps =
-        (sample.gxRaw - gyroBiasX) * GYRO_SCALE_DPS;
-
-    sample.gyDps =
-        (sample.gyRaw - gyroBiasY) * GYRO_SCALE_DPS;
-
-    sample.gzDps =
-        (sample.gzRaw - gyroBiasZ) * GYRO_SCALE_DPS;
-
-
-    // --------------------------------------------------------
-    // TEMPERATURE CONVERSION
-    // --------------------------------------------------------
-
+    // Temperature conversion.
     sample.temperatureC =
         (sample.temperatureRaw / 340.0f) + 36.53f;
 
-
-    // --------------------------------------------------------
-    // ACCELEROMETER PITCH AND ROLL
-    // --------------------------------------------------------
-
+    // Accelerometer pitch and roll.
     const float accelRoll =
-        atan2f(
-            sample.ayG,
-            sample.azG
-        ) * RAD_TO_DEG_F;
+        atan2f(sample.ayG, sample.azG) * RAD_TO_DEG_F;
 
     const float accelPitch =
         atan2f(
@@ -422,17 +487,12 @@ void update()
             )
         ) * RAD_TO_DEG_F;
 
-
-    // --------------------------------------------------------
-    // COMPLEMENTARY FILTER
-    // --------------------------------------------------------
-
+    // Time since previous successful sample.
     const float dt =
         (now - lastSampleMs) / 1000.0f;
 
-    if (!filterInitialized ||
-        dt <= 0.0f ||
-        dt > 0.25f) {
+    // Complementary filter.
+    if (!filterInitialized || dt <= 0.0f || dt > 0.25f) {
 
         sample.rollDeg = accelRoll;
         sample.pitchDeg = accelPitch;
@@ -441,40 +501,34 @@ void update()
     }
     else {
 
-        // Gyroscope provides responsive movement tracking.
-        // Accelerometer corrects long-term pitch/roll drift
-        // when gravity is the main acceleration.
-
         sample.rollDeg =
-            0.98f *
-            (latest.rollDeg + sample.gxDps * dt) +
+            0.98f * (filteredRollDeg + sample.gxDps * dt) +
             0.02f * accelRoll;
 
         sample.pitchDeg =
-            0.98f *
-            (latest.pitchDeg + sample.gyDps * dt) +
+            0.98f * (filteredPitchDeg + sample.gyDps * dt) +
             0.02f * accelPitch;
     }
 
-
-    // --------------------------------------------------------
-    // UPDATE LATEST SENSOR DATA
-    // --------------------------------------------------------
+    // Update task-owned filter state.
+    filteredRollDeg = sample.rollDeg;
+    filteredPitchDeg = sample.pitchDeg;
 
     sample.timestampMs = now;
-
     sample.valid = true;
 
-    latest = sample;
+    // Publish a complete sensor snapshot.
+    if (xSemaphoreTake(dataMutex, portMAX_DELAY) == pdTRUE) {
+
+        latest = sample;
+
+        xSemaphoreGive(dataMutex);
+    }
 
     lastSampleMs = now;
 }
 
-
-// ------------------------------------------------------------
-// CHECK SENSOR INITIALIZATION
-// ------------------------------------------------------------
-
+// The device must remain stationary during gyro calibration.
 bool isReady()
 {
     return ready;
@@ -495,10 +549,78 @@ uint8_t address()
 // GET LATEST SENSOR DATA
 // ------------------------------------------------------------
 
-const Data &getData()
+bool getData(Data &out)
 {
-    return latest;
+    if (dataMutex == nullptr) {
+        return false;
+    }
+
+    if (xSemaphoreTake(
+            dataMutex,
+            pdMS_TO_TICKS(20)) != pdTRUE) {
+        return false;
+    }
+
+    out = latest;
+
+    const bool valid = latest.valid;
+
+    xSemaphoreGive(dataMutex);
+
+    return valid;
 }
 
+bool isTaskRunning()
+{
+    return mpuTaskHandle != nullptr;
+}
+
+
+bool startTask()
+{
+    if (!ready || mpuTaskHandle != nullptr) {
+        return false;
+    }
+
+    if (dataMutex == nullptr) {
+        return false;
+    }
+
+    pinMode(PinConfig::MPU6050_INT, INPUT);
+
+    BaseType_t result = xTaskCreate(
+        mpuTask,
+        "MPU6050",
+        MPU_TASK_STACK_SIZE,
+        nullptr,
+        MPU_TASK_PRIORITY,
+        &mpuTaskHandle
+    );
+
+    if (result != pdPASS) {
+        mpuTaskHandle = nullptr;
+        return false;
+    }
+
+    // Configure active-high, push-pull interrupt output.
+    if (!writeRegister(REG_INT_PIN_CFG, 0x00) ||
+        !writeRegister(REG_INT_ENABLE, 0x01)) {
+
+        writeRegister(REG_INT_ENABLE, 0x00);
+
+        vTaskDelete(mpuTaskHandle);
+        mpuTaskHandle = nullptr;
+
+        return false;
+    }
+
+    attachInterrupt(
+        digitalPinToInterrupt(PinConfig::MPU6050_INT),
+        mpuDataReadyISR,
+        RISING
+    );
+
+    return true;
+}
 
 } // namespace MPU6050

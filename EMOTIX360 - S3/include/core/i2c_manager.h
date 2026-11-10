@@ -5,13 +5,12 @@
 
 namespace I2CManager {
 
-// Initialize the shared I2C bus.
 bool begin();
-
-// Check whether the bus has been initialized.
 bool isReady();
 
-// Check whether a device acknowledges an I2C address.
+bool lock(uint32_t timeoutMs = 50);
+void unlock();
+
 bool isDeviceConnected(uint8_t address);
 
 }

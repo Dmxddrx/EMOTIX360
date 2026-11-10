@@ -1,52 +1,67 @@
 #include "general.h"
 
 #include "i2c_manager.h"
-#include "display_manager.h"
 #include "mpu6050_driver.h"
+#include "display_manager.h"
+
+#include <Arduino.h>
 
 namespace General {
 
 bool begin()
 {
-    // --------------------------------------------------------
-    // INITIALIZE SHARED I2C
-    // --------------------------------------------------------
-
+    // Initialize shared I2C.
     if (!I2CManager::begin()) {
+        Serial.println("I2C initialization failed");
         return false;
     }
 
+    Serial.println("I2C ready");
 
-    // --------------------------------------------------------
-    // INITIALIZE OLED
-    // --------------------------------------------------------
 
+    // Initialize hardware.
     const bool oledReady = DisplayManager::begin();
-
-
-    // --------------------------------------------------------
-    // INITIALIZE MPU6050
-    // --------------------------------------------------------
-
     const bool mpuReady = MPU6050::begin();
 
-
-    // --------------------------------------------------------
-    // START INDEPENDENT MODULE TASKS
-    // --------------------------------------------------------
-
-    // These functions will be implemented in their respective
-    // modules. Each module manages its own execution.
-
-    if (mpuReady) {
-        MPU6050::startTask();
-    }
-
     if (oledReady) {
-        DisplayManager::startTask();
+        DisplayManager::showStartupMessage("EMOTIX360");
     }
 
-    return true;
+
+    // Start independent MPU task.
+    const bool mpuTaskStarted =
+        mpuReady && MPU6050::startTask();
+
+
+    // Prepare initial display state.
+    if (oledReady) {
+
+        DisplayManager::Status status{};
+
+        status.mpuReady = mpuTaskStarted;
+
+        // modeName already defaults to EMOTIX360.
+        DisplayManager::setStatus(status);
+    }
+
+
+    // Start independent OLED task.
+    const bool oledTaskStarted =
+        oledReady && DisplayManager::startTask();
+
+
+    // Report initialization.
+    Serial.printf(
+        "MPU6050: %s\n",
+        mpuTaskStarted ? "RUNNING" : "FAILED"
+    );
+
+    Serial.printf(
+        "OLED: %s\n",
+        oledTaskStarted ? "RUNNING" : "FAILED"
+    );
+
+    return mpuTaskStarted && oledTaskStarted;
 }
 
 }

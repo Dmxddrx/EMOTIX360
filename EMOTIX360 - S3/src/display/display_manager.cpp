@@ -1,15 +1,12 @@
-#include "display/display_manager.h"
+#include "display_manager.h"
 
-#include "display/fonts.h"
-#include "display/icons.h"
-
-#include "drivers/mpu6050_driver.h"
-
-#include "core/i2c_manager.h"
-#include "config/device_config.h"
+#include "fonts.h"
+#include "icons.h"
+#include "mpu6050_driver.h"
+#include "i2c_manager.h"
+#include "device_config.h"
 
 #include <Wire.h>
-
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
@@ -17,9 +14,15 @@
 #include <stdarg.h>
 #include <string.h>
 
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/semphr.h>
+
 namespace DisplayManager {
 namespace {
 
+SemaphoreHandle_t statusMutex = nullptr;
+SemaphoreHandle_t logMutex = nullptr;
 
 constexpr int DISPLAY_NATIVE_WIDTH = 128;
 constexpr int DISPLAY_NATIVE_HEIGHT = 64;
@@ -47,6 +50,19 @@ Adafruit_SSD1306 display(
 
 bool displayReady = false;
 
+// ------------------------------------------------------------
+// OLED FREERTOS CONFIGURATION
+// ------------------------------------------------------------
+
+constexpr uint32_t OLED_TASK_STACK_SIZE = 8192;
+
+constexpr UBaseType_t OLED_TASK_PRIORITY = 2;
+
+constexpr uint32_t OLED_REFRESH_INTERVAL_MS = 100;
+
+TaskHandle_t oledTaskHandle = nullptr;
+
+Status currentStatus{};
 
 // ------------------------------------------------------------
 // AUTOMATIC DEVICE POSITION DETECTION
@@ -157,6 +173,61 @@ uint8_t getRotationForPosition(DevicePosition position)
     }
 }
 
+// ------------------------------------------------------------
+// OLED FREERTOS TASK
+// ------------------------------------------------------------
+
+void oledTask(void *parameter)
+{
+    Status snapshot{};
+
+    for (;;) {
+
+        // Wait for a display notification or timed refresh.
+        //
+        // This blocks the task instead of continuously
+        // checking for changes.
+
+        ulTaskNotifyTake(
+            pdTRUE,
+            pdMS_TO_TICKS(OLED_REFRESH_INTERVAL_MS)
+        );
+
+
+        // ----------------------------------------------------
+        // GET THREAD-SAFE STATUS SNAPSHOT
+        // ----------------------------------------------------
+
+        if (xSemaphoreTake(
+                statusMutex,
+                pdMS_TO_TICKS(20)) != pdTRUE) {
+
+            continue;
+        }
+
+        snapshot = currentStatus;
+
+        xSemaphoreGive(statusMutex);
+
+
+        // ----------------------------------------------------
+        // RENDER DISPLAY
+        // ----------------------------------------------------
+
+        update(snapshot);
+    }
+}
+
+void flushDisplay()
+{
+    if (!I2CManager::lock(100)) {
+        return;
+    }
+
+    flushDisplay();
+
+    I2CManager::unlock();
+}
 
 /*
  * Update OLED orientation only after a stable position is detected.
@@ -170,7 +241,12 @@ void updateAutomaticRotation()
         return;
     }
 
-    const MPU6050::Data &imu = MPU6050::getData();
+    MPU6050::Data imu;
+
+    if (!MPU6050::getData(imu)) {
+        // Display unavailable sensor data.
+        return;
+    }
 
     if (!imu.valid) {
         return;
@@ -570,7 +646,9 @@ void drawPortraitClockPage(const Status &status)
     // --------------------------------------------------
 
     drawCenteredText(
-        status.modeName != nullptr ? status.modeName : "UNKNOWN",
+        status.modeName[0] != '\0'
+        ? status.modeName
+        : "UNKNOWN",
         120,
         1
     );
@@ -595,7 +673,7 @@ void drawNetworkPage(const Status &status)
     display.setCursor(0, 39);
     display.print("IP: ");
     display.println(
-        status.ipAddress != nullptr
+        status.ipAddress[0] != '\0'
             ? status.ipAddress
             : "-"
     );
@@ -603,9 +681,9 @@ void drawNetworkPage(const Status &status)
     display.setCursor(0, 49);
     display.print("Mode: ");
     display.println(
-        status.modeName != nullptr
-            ? status.modeName
-            : "-"
+        status.modeName[0] != '\0'
+        ? status.modeName
+        : "UNKNOWN"
     );
 }
 
@@ -663,7 +741,9 @@ void drawPortraitNetworkPage(const Status &status)
     display.print("Mode:");
 
     drawCenteredText(
-        status.modeName != nullptr ? status.modeName : "UNKNOWN",
+        status.modeName[0] != '\0'
+        ? status.modeName
+        : "UNKNOWN",
         116,
         1
     );
@@ -687,7 +767,12 @@ void drawImuPage(const Status &status)
         return;
     }
 
-    const MPU6050::Data &imu = MPU6050::getData();
+    MPU6050::Data imu;
+
+    if (!MPU6050::getData(imu)) {
+        // Display unavailable sensor data.
+        return;
+    }
 
     if (!imu.valid) {
         display.println("MPU6050: NO DATA");
@@ -770,7 +855,12 @@ void drawPortraitImuPage(const Status &status)
         return;
     }
 
-    const MPU6050::Data &imu = MPU6050::getData();
+    MPU6050::Data imu;
+
+    if (!MPU6050::getData(imu)) {
+        // Display unavailable sensor data.
+        return;
+    }
 
     if (!imu.valid)
     {
@@ -847,7 +937,7 @@ void drawModeFooter(const Status &status)
         footer,
         sizeof(footer),
         "%s",
-        status.modeName != nullptr ? status.modeName : "UNKNOWN"
+        status.modeName[0] != '\0' ? status.modeName : "UNKNOWN"
     );
 
     display.setTextSize(1);
@@ -864,19 +954,27 @@ void drawLogLine()
 {
     const uint32_t now = millis();
 
-    if (logCount > 0 &&
-        (uint32_t)(now - lastLogRotateMs) >= LOG_HOLD_MS) {
+    if (logMutex != nullptr &&
+        xSemaphoreTake(logMutex, pdMS_TO_TICKS(5)) == pdTRUE) {
 
-        strncpy(
-            activeLog,
-            logQueue[logHead],
-            sizeof(activeLog) - 1
-        );
-        activeLog[sizeof(activeLog) - 1] = '\0';
+        if (logCount > 0 &&
+            (uint32_t)(now - lastLogRotateMs) >= LOG_HOLD_MS) {
 
-        logHead = (logHead + 1) % LOG_QUEUE_SIZE;
-        --logCount;
-        lastLogRotateMs = now;
+            strncpy(
+                activeLog,
+                logQueue[logHead],
+                sizeof(activeLog) - 1
+            );
+
+            activeLog[sizeof(activeLog) - 1] = '\0';
+
+            logHead = (logHead + 1) % LOG_QUEUE_SIZE;
+            --logCount;
+
+            lastLogRotateMs = now;
+        }
+
+        xSemaphoreGive(logMutex);
     }
 
     display.setTextSize(1);
@@ -884,7 +982,72 @@ void drawLogLine()
     display.setCursor(0, 56);
     display.print(activeLog);
 }
+
 } // namespace
+
+// ------------------------------------------------------------
+// START OLED TASK
+// ------------------------------------------------------------
+
+bool startTask()
+{
+    if (!displayReady || oledTaskHandle != nullptr ||
+        statusMutex == nullptr) {
+        return false;
+    }
+
+    BaseType_t result = xTaskCreate(
+        oledTask,
+        "OLED",
+        OLED_TASK_STACK_SIZE,
+        nullptr,
+        OLED_TASK_PRIORITY,
+        &oledTaskHandle
+    );
+
+    if (result != pdPASS) {
+        oledTaskHandle = nullptr;
+        return false;
+    }
+
+    return true;
+}
+
+
+// ------------------------------------------------------------
+// UPDATE DISPLAY STATUS
+// ------------------------------------------------------------
+
+void setStatus(const Status &status)
+{
+    if (statusMutex == nullptr) {
+        return;
+    }
+
+    if (xSemaphoreTake(
+            statusMutex,
+            pdMS_TO_TICKS(20)) != pdTRUE) {
+        return;
+    }
+
+    currentStatus = status;
+
+    xSemaphoreGive(statusMutex);
+
+    requestUpdate();
+}
+
+
+// ------------------------------------------------------------
+// REQUEST DISPLAY REFRESH
+// ------------------------------------------------------------
+
+void requestUpdate()
+{
+    if (oledTaskHandle != nullptr) {
+        xTaskNotifyGive(oledTaskHandle);
+    }
+}
 
 // ------------------------------------------------------------
 // INITIALIZE SSD1306 OLED
@@ -894,30 +1057,48 @@ bool begin()
 {
     displayReady = false;
 
-    // The shared I2C bus must already be initialized.
     if (!I2CManager::isReady()) {
         return false;
     }
 
-    // Confirm that an OLED responds at the configured address.
+    // Create synchronization objects.
+    if (statusMutex == nullptr) {
+        statusMutex = xSemaphoreCreateMutex();
+    }
+
+    if (logMutex == nullptr) {
+        logMutex = xSemaphoreCreateMutex();
+    }
+
+    if (statusMutex == nullptr || logMutex == nullptr) {
+        return false;
+    }
+
+    // Check OLED acknowledgement.
     if (!I2CManager::isDeviceConnected(
             DeviceConfig::OLED_ADDRESS)) {
         return false;
     }
 
-    // periphBegin = false:
-    // I2CManager has already initialized Wire with the
-    // non-default SDA and SCL pins.
-    displayReady = display.begin(
+    // Initialize OLED using the shared Wire instance.
+    if (!I2CManager::lock(100)) {
+        return false;
+    }
+
+    const bool initialized = display.begin(
         SSD1306_SWITCHCAPVCC,
         DeviceConfig::OLED_ADDRESS,
         true,
         false
     );
 
-    if (!displayReady) {
+    I2CManager::unlock();
+
+    if (!initialized) {
         return false;
     }
+
+    displayReady = true;
 
     display.setRotation(0);
 
@@ -933,20 +1114,17 @@ bool begin()
     display.setTextColor(SSD1306_WHITE);
     display.setTextWrap(false);
 
-    display.display();
+    flushDisplay();
 
     return true;
 }
 
 
-// ------------------------------------------------------------
-// CHECK OLED INITIALIZATION
-// ------------------------------------------------------------
-
 bool isReady()
 {
     return displayReady;
 }
+
 
 void showStartupMessage(const char *message)
 {
@@ -969,19 +1147,21 @@ void showStartupMessage(const char *message)
         display.setTextSize(1);
         display.setCursor(x, (display.height() - 8) / 2);
         display.print(message);
-        display.display();
+        flushDisplay();
 
         delay(8);
     }
 
     display.clearDisplay();
-    display.display();
+    flushDisplay();
 
 }
 
 void logMessage(const char *format, ...)
 {
-    if (format == nullptr) return;
+    if (format == nullptr || logMutex == nullptr) {
+        return;
+    }
 
     char message[96];
 
@@ -992,10 +1172,19 @@ void logMessage(const char *format, ...)
 
     char shortMessage[LOG_LINE_SIZE];
 
-    // Reserve two characters for the visible log marker.
-    snprintf(shortMessage, sizeof(shortMessage), "> %.19s", message);
+    snprintf(
+        shortMessage,
+        sizeof(shortMessage),
+        "> %.19s",
+        message
+    );
 
-    // If full, discard the oldest queued message.
+    if (xSemaphoreTake(
+            logMutex,
+            pdMS_TO_TICKS(20)) != pdTRUE) {
+        return;
+    }
+
     if (logCount >= LOG_QUEUE_SIZE) {
         logHead = (logHead + 1) % LOG_QUEUE_SIZE;
         --logCount;
@@ -1009,9 +1198,14 @@ void logMessage(const char *format, ...)
         shortMessage,
         LOG_LINE_SIZE - 1
     );
+
     logQueue[tail][LOG_LINE_SIZE - 1] = '\0';
 
     ++logCount;
+
+    xSemaphoreGive(logMutex);
+
+    requestUpdate();
 }
 
 void update(const Status &status)
@@ -1085,7 +1279,7 @@ void update(const Status &status)
         drawLogLine();
     }
 
-    display.display();
+    flushDisplay();
 }
 
 } // namespace DisplayManager
