@@ -32,7 +32,33 @@ bool begin();
 bool startTask();
 bool isReady();
 
-void setStatus(const Status &status);
+void setNetworkStatus(
+    bool wifiConnected,
+    bool ntpSynced,
+    const char *ipAddress
+);
+
+void setPowerStatus(
+    bool externalPower,
+    int batteryPercent
+);
+
+void setClockStatus(
+    const struct tm &time,
+    bool valid
+);
+
+void setMPUStatus(
+    bool ready,
+    float pitchDeg,
+    float rollDeg
+);
+
+void setApplicationStatus(
+    uint8_t page,
+    const char *modeName
+);
+
 void requestUpdate();
 
 void showStartupMessage(const char *message);

@@ -49,6 +49,7 @@ secrets/
 !**/wifi_config.example.h
 !**/credentials.example.h
 !**/arduino_secrets.example.h
+!**/arduino_secrets.h
 
 # Logs
 *.log

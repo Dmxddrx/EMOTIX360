@@ -14,6 +14,8 @@ constexpr uint16_t TIMEOUT_MS = 50;
 
 namespace DeviceConfig {
 
+constexpr bool OLED_ENABLED = false;
+
 // SSD1306 OLED
 constexpr uint8_t OLED_ADDRESS = 0x3C;
 

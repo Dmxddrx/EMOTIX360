@@ -589,13 +589,14 @@ bool startTask()
 
     pinMode(PinConfig::MPU6050_INT, INPUT);
 
-    BaseType_t result = xTaskCreate(
+    BaseType_t result = xTaskCreatePinnedToCore(
         mpuTask,
         "MPU6050",
         MPU_TASK_STACK_SIZE,
         nullptr,
         MPU_TASK_PRIORITY,
-        &mpuTaskHandle
+        &mpuTaskHandle,
+        1
     );
 
     if (result != pdPASS) {

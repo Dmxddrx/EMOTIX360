@@ -1007,13 +1007,14 @@ bool startTask()
         return false;
     }
 
-    BaseType_t result = xTaskCreate(
+    BaseType_t result = xTaskCreatePinnedToCore(
         oledTask,
         "OLED",
         OLED_TASK_STACK_SIZE,
         nullptr,
         OLED_TASK_PRIORITY,
-        &oledTaskHandle
+        &oledTaskHandle,
+        1
     );
 
     if (result != pdPASS) {
@@ -1033,25 +1034,6 @@ void notifyDisplayUpdate()
     if (oledTaskHandle != nullptr) {
         xTaskNotifyGive(oledTaskHandle);
     }
-}
-
-void setStatus(const Status &status)
-{
-    if (statusMutex == nullptr) {
-        return;
-    }
-
-    if (xSemaphoreTake(
-            statusMutex,
-            pdMS_TO_TICKS(20)) != pdTRUE) {
-        return;
-    }
-
-    currentStatus = status;
-
-    xSemaphoreGive(statusMutex);
-
-    requestUpdate();
 }
 
 void setNetworkStatus(

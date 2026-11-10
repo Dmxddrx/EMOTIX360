@@ -3,65 +3,258 @@
 #include "i2c_manager.h"
 #include "mpu6050_driver.h"
 #include "display_manager.h"
+#include "device_config.h"
+#include "wifi_manager.h"
 
 #include <Arduino.h>
 
-namespace General {
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
-bool begin()
+namespace General {
+namespace {
+
+constexpr uint32_t SERIAL_TASK_STACK_SIZE = 4096;
+constexpr UBaseType_t SERIAL_TASK_PRIORITY = 1;
+
+constexpr uint32_t SERIAL_REFRESH_MS = 500;
+
+TaskHandle_t serialTaskHandle = nullptr;
+
+
+// ------------------------------------------------------------
+// SERIAL DIAGNOSTIC TASK
+// ------------------------------------------------------------
+
+void serialMonitorTask(void *parameter)
 {
-    // Initialize shared I2C.
-    if (!I2CManager::begin()) {
-        Serial.println("I2C initialization failed");
+    MPU6050::Data imu{};
+
+    Serial.println();
+    Serial.println("==========================================");
+    Serial.println("          EMOTIX360 DIAGNOSTICS");
+    Serial.println("==========================================");
+
+    for (;;) {
+
+        if (!MPU6050::isReady() ||
+            !MPU6050::isTaskRunning()) {
+
+            Serial.println("[MPU6050] INITIALIZATION FAILED");
+        }
+        else if (!MPU6050::getData(imu)) {
+
+            Serial.println("[MPU6050] WAITING FOR SENSOR DATA");
+        }
+        else {
+
+            const uint32_t ageMs =
+                millis() - imu.timestampMs;
+
+            if (ageMs > 1000) {
+
+                Serial.printf(
+                    "[MPU6050] WARNING: STALE DATA (%lu ms)\n",
+                    (unsigned long)ageMs
+                );
+            }
+            else {
+
+                Serial.printf(
+                    "[RAW] AX:%6d AY:%6d AZ:%6d | "
+                    "GX:%6d GY:%6d GZ:%6d\n",
+                    imu.axRaw,
+                    imu.ayRaw,
+                    imu.azRaw,
+                    imu.gxRaw,
+                    imu.gyRaw,
+                    imu.gzRaw
+                );
+
+                Serial.printf(
+                    "[ACC] X:%+.3f Y:%+.3f Z:%+.3f g\n",
+                    imu.axG,
+                    imu.ayG,
+                    imu.azG
+                );
+
+                Serial.printf(
+                    "[GYR] X:%+.2f Y:%+.2f Z:%+.2f deg/s\n",
+                    imu.gxDps,
+                    imu.gyDps,
+                    imu.gzDps
+                );
+
+                Serial.printf(
+                    "[IMU] Pitch:%+.2f Roll:%+.2f Temp:%.2f C\n",
+                    imu.pitchDeg,
+                    imu.rollDeg,
+                    imu.temperatureC
+                );
+
+                Serial.printf(
+                    "[SYSTEM] Sample age:%lu ms | MPU:%s\n",
+                    (unsigned long)ageMs,
+                    imu.valid ? "VALID" : "INVALID"
+                );
+            }
+        }
+
+        Serial.println("------------------------------------------");
+
+        vTaskDelay(pdMS_TO_TICKS(SERIAL_REFRESH_MS));
+    }
+}
+
+
+// ------------------------------------------------------------
+// START SERIAL MONITOR TASK
+// ------------------------------------------------------------
+
+bool startSerialTask()
+{
+    if (serialTaskHandle != nullptr) {
         return false;
     }
 
-    Serial.println("I2C ready");
+    return xTaskCreate(
+        serialMonitorTask,
+        "SerialMonitor",
+        SERIAL_TASK_STACK_SIZE,
+        nullptr,
+        SERIAL_TASK_PRIORITY,
+        &serialTaskHandle
+    ) == pdPASS;
+}
+
+} // namespace serial monitor task
 
 
-    // Initialize hardware.
-    const bool oledReady = DisplayManager::begin();
+// ------------------------------------------------------------
+// INITIALIZE EMOTIX360
+// ------------------------------------------------------------
+
+bool begin()
+{
+    Serial.println();
+    Serial.println("[GENERAL] Initializing EMOTIX360");
+
+
+    // Initialize shared I2C.
+    if (!I2CManager::begin()) {
+        Serial.println("[GENERAL] I2C initialization failed");
+        return false;
+    }
+
+    Serial.println("[GENERAL] I2C ready");
+
+
+    // Initialize OLED only when enabled.
+    if (DeviceConfig::OLED_ENABLED) {
+
+        if (DisplayManager::begin()) {
+
+            Serial.println("[GENERAL] OLED ready");
+
+            DisplayManager::showStartupMessage("EMOTIX360");
+        }
+        else {
+
+            Serial.println("[GENERAL] OLED initialization failed");
+        }
+    }
+    else {
+
+        Serial.println("[GENERAL] OLED disabled");
+    }
+
+
+    // Initialize MPU6050.
     const bool mpuReady = MPU6050::begin();
 
-    if (oledReady) {
-        DisplayManager::showStartupMessage("EMOTIX360");
+    if (mpuReady) {
+
+        Serial.printf(
+            "[GENERAL] MPU6050 detected at 0x%02X\n",
+            MPU6050::address()
+        );
+    }
+    else {
+
+        Serial.println("[GENERAL] MPU6050 initialization failed");
     }
 
 
-    // Start independent MPU task.
-    const bool mpuTaskStarted =
-        mpuReady && MPU6050::startTask();
+    // Start MPU6050 task.
+    bool mpuTaskStarted = false;
 
-
-    // Prepare initial display state.
-    if (oledReady) {
-
-        DisplayManager::Status status{};
-
-        status.mpuReady = mpuTaskStarted;
-
-        // modeName already defaults to EMOTIX360.
-        DisplayManager::setStatus(status);
+    if (mpuReady) {
+        mpuTaskStarted = MPU6050::startTask();
     }
 
-
-    // Start independent OLED task.
-    const bool oledTaskStarted =
-        oledReady && DisplayManager::startTask();
-
-
-    // Report initialization.
     Serial.printf(
-        "MPU6050: %s\n",
-        mpuTaskStarted ? "RUNNING" : "FAILED"
+        "[GENERAL] MPU task: %s\n",
+        mpuTaskStarted ? "STARTED" : "FAILED"
     );
 
+
+
+    // INITIALIZE WIFI MANAGER
+    const bool wifiInitialized = WifiManager::begin();
+
+    bool wifiTaskStarted = false;
+
+    if (wifiInitialized) {
+        wifiTaskStarted = WifiManager::startTask();
+    }
+
     Serial.printf(
-        "OLED: %s\n",
-        oledTaskStarted ? "RUNNING" : "FAILED"
+        "[GENERAL] WiFi Manager: %s\n",
+        wifiTaskStarted ? "STARTED" : "UNAVAILABLE"
     );
 
-    return mpuTaskStarted && oledTaskStarted;
+
+    // Start OLED task only when OLED is enabled.
+    bool oledTaskStarted = false;
+
+    if (DeviceConfig::OLED_ENABLED &&
+        DisplayManager::isReady()) {
+
+        DisplayManager::setApplicationStatus(
+            0,
+            "EMOTIX360"
+        );
+
+        DisplayManager::setMPUStatus(
+            mpuTaskStarted,
+            0.0f,
+            0.0f
+        );
+
+        oledTaskStarted = DisplayManager::startTask();
+    }
+
+    Serial.printf(
+        "[GENERAL] OLED task: %s\n",
+        oledTaskStarted ? "STARTED" :
+        (DeviceConfig::OLED_ENABLED ? "FAILED" : "DISABLED")
+    );
+
+
+    // Start independent Serial diagnostic task.
+    const bool serialTaskStarted = startSerialTask();
+
+    Serial.printf(
+        "[GENERAL] Serial monitor: %s\n",
+        serialTaskStarted ? "STARTED" : "FAILED"
+    );
+
+
+    Serial.println("==========================================");
+
+    return mpuTaskStarted &&
+       serialTaskStarted &&
+       (!DeviceConfig::OLED_ENABLED || oledTaskStarted);
 }
 
-}
+} // namespace General
