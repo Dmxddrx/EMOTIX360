@@ -1,10 +1,11 @@
 #include "general.h"
 
 #include "i2c_manager.h"
-#include "mpu6050_driver.h"
+#include "mpu6050.h"
 #include "display_manager.h"
 #include "device_config.h"
 #include "wifi_manager.h"
+#include "max7219.h"
 
 #include <Arduino.h>
 
@@ -127,7 +128,7 @@ bool startSerialTask()
     ) == pdPASS;
 }
 
-} // namespace serial monitor task
+} // namespace
 
 
 // ------------------------------------------------------------
@@ -148,6 +149,39 @@ bool begin()
 
     Serial.println("[GENERAL] I2C ready");
 
+
+    // --------------------------------------------------------
+    // INITIALIZE MAX7219 MATRIX
+    // --------------------------------------------------------
+
+    const bool matrixReady = MAX7219_Init();
+
+    Serial.printf(
+        "[GENERAL] MAX7219: %s\n",
+        matrixReady ? "INITIALIZED" : "FAILED"
+    );
+
+    if (matrixReady) {
+
+        MAX7219_Clear();
+
+        // Draw the outer boundary of both 8x8 modules.
+        for (int16_t x = 0; x < 16; ++x) {
+            MAX7219_SetPixel(x, 0, 1);
+            MAX7219_SetPixel(x, 7, 1);
+        }
+
+        for (int16_t y = 0; y < 8; ++y) {
+
+            MAX7219_SetPixel(0, y, 1);
+            MAX7219_SetPixel(7, y, 1);
+
+            MAX7219_SetPixel(8, y, 1);
+            MAX7219_SetPixel(15, y, 1);
+        }
+
+        MAX7219_Update();
+    }
 
     // Initialize OLED only when enabled.
     if (DeviceConfig::OLED_ENABLED) {
@@ -254,6 +288,7 @@ bool begin()
 
     return mpuTaskStarted &&
        serialTaskStarted &&
+       matrixReady &&
        (!DeviceConfig::OLED_ENABLED || oledTaskStarted);
 }
 

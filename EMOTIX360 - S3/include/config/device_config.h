@@ -25,4 +25,12 @@ constexpr uint8_t MPU6050_ADDRESS_HIGH = 0x69;
 
 }
 
+namespace MatrixConfig {
+
+constexpr uint8_t MODULE_COUNT = 2;
+constexpr uint32_t SPI_CLOCK_HZ = 1000000UL;
+constexpr uint8_t DEFAULT_BRIGHTNESS = 5;
+
+}
+
 #endif

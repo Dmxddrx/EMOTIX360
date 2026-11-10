@@ -5,14 +5,17 @@
 
 namespace PinConfig {
 
-// ------------------------------------------------------------
-// ESP32-S3 I2C PINS
-// ------------------------------------------------------------
-
+// I2C
 constexpr uint8_t I2C_SDA = 6;
 constexpr uint8_t I2C_SCL = 7;
 
+// MPU6050 interrupt
 constexpr uint8_t MPU6050_INT = 4;
+
+// MAX7219 SPI
+constexpr uint8_t MATRIX_CLK  = 12;
+constexpr uint8_t MATRIX_MOSI = 11;
+constexpr uint8_t MATRIX_CS   = 10;
 
 }
 

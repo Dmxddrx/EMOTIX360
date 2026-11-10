@@ -2,7 +2,7 @@
 
 #include "fonts.h"
 #include "icons.h"
-#include "mpu6050_driver.h"
+#include "mpu6050.h"
 #include "i2c_manager.h"
 #include "device_config.h"
 
