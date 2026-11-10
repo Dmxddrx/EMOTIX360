@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include <esp_heap_caps.h>
 #include <esp_system.h>
+#include <string.h>
 
 void setup()
 {
