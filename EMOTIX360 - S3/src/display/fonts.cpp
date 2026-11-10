@@ -4,7 +4,7 @@
  * row-major uint16_t data uses the MSB as the leftmost pixel. The original source
  * states that no license is attached and asks not to claim sole authorship.
  */
-#include "fonts.h"
+#include "display/fonts.h"
 #include <string.h>
 
 /* Bitmap data ported from the author's supplied STM32 fonts.c.
