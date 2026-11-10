@@ -224,7 +224,7 @@ void flushDisplay()
         return;
     }
 
-    flushDisplay();
+    display.display();
 
     I2CManager::unlock();
 }
@@ -710,12 +710,13 @@ void drawPortraitNetworkPage(const Status &status)
 
     // An IPv4 address can be wider than the 64-pixel display.
     // Split it into two lines instead of clipping the address.
-    if (status.ipAddress != nullptr)
+    if (status.ipAddress[0] != '\0')
     {
         char ipFirst[11] = {};
         char ipSecond[11] = {};
 
         const size_t ipLength = strlen(status.ipAddress);
+
         const size_t firstLength =
             (ipLength > 10) ? 10 : ipLength;
 
@@ -735,6 +736,11 @@ void drawPortraitNetworkPage(const Status &status)
 
         display.setCursor(3, 80);
         display.print(ipSecond);
+    }
+    else
+    {
+        display.setCursor(3, 68);
+        display.print("-");
     }
 
     display.setCursor(3, 103);
@@ -770,7 +776,7 @@ void drawImuPage(const Status &status)
     MPU6050::Data imu;
 
     if (!MPU6050::getData(imu)) {
-        // Display unavailable sensor data.
+        drawCenteredText("NO SENSOR DATA", 40, 1);
         return;
     }
 
@@ -991,8 +997,10 @@ void drawLogLine()
 
 bool startTask()
 {
-    if (!displayReady || oledTaskHandle != nullptr ||
-        statusMutex == nullptr) {
+    if (!displayReady ||
+        oledTaskHandle != nullptr ||
+        statusMutex == nullptr ||
+        logMutex == nullptr) {
         return false;
     }
 

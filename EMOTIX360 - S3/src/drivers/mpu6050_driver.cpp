@@ -51,7 +51,7 @@ constexpr uint16_t CALIBRATION_SAMPLES = 100;
 // Require at least 80 successful readings.
 constexpr uint16_t CALIBRATION_MIN_SAMPLES = 80;
 
-constexpr uint16_t CALIBRATION_DELAY_MS = 5;
+constexpr uint16_t CALIBRATION_DELAY_MS = 10;
 
 
 // ------------------------------------------------------------
@@ -450,10 +450,11 @@ static void processSensorData()
 
     if (!readRaw(sample)) {
 
-        if (xSemaphoreTake(dataMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
-            latest.valid = false;
-            xSemaphoreGive(dataMutex);
-        }
+        xSemaphoreTake(dataMutex, portMAX_DELAY);
+
+        latest.valid = false;
+
+        xSemaphoreGive(dataMutex);
 
         return;
     }
