@@ -83,34 +83,23 @@ AnimationManager::Mode getNextMode(
         case AnimationManager::Mode::IDLE:
             return AnimationManager::Mode::SAND_CLOCK;
 
-
         case AnimationManager::Mode::SAND_CLOCK:
             return AnimationManager::Mode::WATER;
-
 
         case AnimationManager::Mode::WATER:
             return AnimationManager::Mode::SAND_GRAVITY;
 
-
         case AnimationManager::Mode::SAND_GRAVITY:
-            return AnimationManager::Mode::SMALL_ANIMATIONS;
-
-
-        case AnimationManager::Mode::SMALL_ANIMATIONS:
             return AnimationManager::Mode::HEART;
-
 
         case AnimationManager::Mode::HEART:
             return AnimationManager::Mode::RAIN;
 
-
         case AnimationManager::Mode::RAIN:
             return AnimationManager::Mode::WAVES;
 
-
         case AnimationManager::Mode::WAVES:
             return AnimationManager::Mode::IDLE;
-
 
         default:
             return AnimationManager::Mode::IDLE;

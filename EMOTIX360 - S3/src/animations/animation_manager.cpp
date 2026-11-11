@@ -42,7 +42,6 @@ bool initialized = false;
 bool isSmallAnimationMode(Mode mode)
 {
     switch (mode) {
-        case Mode::SMALL_ANIMATIONS:
         case Mode::HEART:
         case Mode::RAIN:
         case Mode::WAVES:
@@ -68,7 +67,6 @@ SmallAnimations::Effect getSmallAnimationEffect(Mode mode)
         case Mode::WAVES:
             return SmallAnimations::Effect::WAVES;
 
-        case Mode::SMALL_ANIMATIONS:
         default:
             return SmallAnimations::Effect::STARTUP;
     }
@@ -95,8 +93,15 @@ SmallAnimations::Effect getSmallAnimationEffect(Mode mode)
  */
 void applyMode(Mode newMode, Mode &activeMode)
 {
-    // Ignore requests for the currently active mode.
     if (newMode == activeMode) {
+
+        // Ensure the initial IDLE mode clears the
+        // matrix, even if IDLE was already active.
+        if (newMode == Mode::IDLE) {
+            MAX7219_Clear();
+            MAX7219_Update();
+        }
+
         return;
     }
 
@@ -106,78 +111,66 @@ void applyMode(Mode newMode, Mode &activeMode)
     const bool isNewSmallAnimation =
         isSmallAnimationMode(newMode);
 
-
-    // --------------------------------------------------------
-    // EXIT CURRENT MODULE
-    // --------------------------------------------------------
-
-    // Restore brightness when leaving SmallAnimations entirely.
-    //
-    // Do not call end() when switching between HEART, RAIN,
-    // WAVES, and STARTUP because they share the same module.
+    // Stop SmallAnimations only when leaving its three effects.
     if (wasSmallAnimation && !isNewSmallAnimation) {
         SmallAnimations::end();
     }
 
-
-    // --------------------------------------------------------
-    // DISPLAY CLEAR
-    // --------------------------------------------------------
-
-    // Restore your existing MAX7219 matrix-clear operation here.
-    //
-    // I have not assumed a clear-function name because the
-    // max7219.h API was not included in the supplied code.
-    //
-    // Make sure the display is cleared when entering IDLE.
-
-
-    // --------------------------------------------------------
-    // START NEW MODULE
-    // --------------------------------------------------------
+    // Clear the previous animation frame.
+    MAX7219_Clear();
+    MAX7219_Update();
 
     switch (newMode) {
 
         case Mode::IDLE:
-            // No animation. The matrix should remain blank.
             break;
-
 
         case Mode::SAND_CLOCK:
             SandClock::begin();
             break;
 
-
         case Mode::WATER:
             WaterAnimation::begin();
             break;
-
 
         case Mode::SAND_GRAVITY:
             SandGravity::begin();
             break;
 
-
-        case Mode::SMALL_ANIMATIONS:
         case Mode::HEART:
         case Mode::RAIN:
         case Mode::WAVES:
 
-            // Initialise SmallAnimations only when entering
-            // from a different animation module.
+            // Initialize the shared module only once
+            // when entering from a different module.
             if (!wasSmallAnimation) {
-                SmallAnimations::begin();
+                if (!SmallAnimations::begin()) {
+                    Serial.println(
+                        "[ANIMATION] SmallAnimations initialization failed"
+                    );
+                    activeMode = Mode::IDLE;
+                    return;
+                }
             }
 
-            // Select the requested individual effect.
-            SmallAnimations::setEffect(
-                getSmallAnimationEffect(newMode)
-            );
+            if (!SmallAnimations::setEffect(
+                    getSmallAnimationEffect(newMode))) {
+
+                Serial.println(
+                    "[ANIMATION] Failed to select small animation"
+                );
+
+                if (!wasSmallAnimation) {
+                    SmallAnimations::end();
+                }
+
+                activeMode = Mode::IDLE;
+                return;
+            }
 
             break;
     }
 
-    // Record the newly active mode.
     activeMode = newMode;
 }
 
@@ -239,8 +232,6 @@ void animationTask(void *parameter)
                 SandGravity::update(nowMs);
                 break;
 
-
-            case Mode::SMALL_ANIMATIONS:
             case Mode::HEART:
             case Mode::RAIN:
             case Mode::WAVES:

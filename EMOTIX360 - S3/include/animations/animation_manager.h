@@ -11,7 +11,6 @@ enum class Mode : uint8_t {
     SAND_CLOCK,
     WATER,
     SAND_GRAVITY,
-    SMALL_ANIMATIONS,
     HEART,
     RAIN,
     WAVES
@@ -19,7 +18,7 @@ enum class Mode : uint8_t {
 
 // Initialize the AnimationManager.
 // Must be called after MAX7219_Init().
-bool begin(Mode initialMode = Mode::SAND_CLOCK);
+bool begin(Mode initialMode = Mode::IDLE);
 
 // Create the FreeRTOS animation task.
 bool startTask();

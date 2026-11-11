@@ -30,10 +30,6 @@ constexpr uint16_t NODE_COUNT =
 constexpr uint32_t STARTUP_STEP_MS = 22;
 constexpr uint32_t STARTUP_HOLD_MS = 700;
 
-constexpr uint32_t HEART_DURATION_MS = 10000;
-constexpr uint32_t RAIN_DURATION_MS = 15000;
-constexpr uint32_t WAVES_DURATION_MS = 20000;
-
 // ------------------------------------------------------------
 // HEART ANIMATION
 // ------------------------------------------------------------
@@ -576,13 +572,6 @@ void updateHeart(uint32_t nowMs)
 
         MAX7219_SetBrightness(brightness);
     }
-
-    // Automatically continue to rain.
-    if ((uint32_t)(nowMs - effectStartedMs) >=
-        HEART_DURATION_MS)
-    {
-        setEffectInternal(Effect::RAIN, nowMs);
-    }
 }
 
 // ============================================================
@@ -1087,13 +1076,6 @@ void updateRain(uint32_t nowMs)
 
         renderRain();
     }
-
-    // After the rain duration, begin the wave animation.
-    if ((uint32_t)(nowMs - effectStartedMs) >=
-        RAIN_DURATION_MS)
-    {
-        setEffectInternal(Effect::WAVES, nowMs);
-    }
 }
 
 // ============================================================
@@ -1184,13 +1166,6 @@ void updateWaves(uint32_t nowMs)
             elapsedMs * WAVE_SPEED;
 
         renderWave();
-    }
-
-    // Restart the decorative sequence at the heart animation.
-    if ((uint32_t)(nowMs - effectStartedMs) >=
-        WAVES_DURATION_MS)
-    {
-        setEffectInternal(Effect::HEART, nowMs);
     }
 }
 
