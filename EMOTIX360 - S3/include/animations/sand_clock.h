@@ -10,7 +10,7 @@ void begin();
 // Reset the hourglass and generate a new random source/destination pairing.
 void reset(uint32_t nowMs);
 
-// Call repeatedly from the main loop while LEVEL mode is active.
+// Call periodically from the AnimationManager FreeRTOS task.
 void update(uint32_t nowMs);
 
 } // namespace SandClock

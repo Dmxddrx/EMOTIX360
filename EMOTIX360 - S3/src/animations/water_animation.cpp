@@ -1,3 +1,4 @@
+
 #include "water_animation.h"
 
 #include "max7219.h"
@@ -10,10 +11,23 @@
 namespace WaterAnimation {
 namespace {
 
-constexpr uint8_t MATRIX_SIZE = 8;
+// ------------------------------------------------------------
+// PHYSICAL MATRIX CONFIGURATION
+// ------------------------------------------------------------
 
-constexpr uint8_t MATRIX_WIDTH = MATRIX_SIZE * 2;
-constexpr uint8_t MATRIX_HEIGHT = MATRIX_SIZE;
+// The two 8x8 modules are physically stacked:
+//
+//     Rows 0..7    = Upper slave module.
+//     Rows 8..15   = Lower master module.
+//
+// Simulation coordinates:
+//     X = 0..7     Horizontal position.
+//     Y = 0..15    Vertical position.
+//
+// This represents the actual physical 8x16 hourglass.
+
+constexpr uint8_t MATRIX_WIDTH = 8;
+constexpr uint8_t MATRIX_HEIGHT = 16;
 
 constexpr uint16_t CELL_TOTAL =
     MATRIX_WIDTH * MATRIX_HEIGHT;
@@ -27,48 +41,25 @@ constexpr uint8_t WATER_TOTAL = 64;
 // Time between liquid movement updates.
 constexpr uint32_t FLOW_STEP_MS = 55;
 
-// Maximum number of water pixels allowed to move during
-// one flow update. This controls the apparent liquid speed.
+// Maximum water pixels allowed to move during one flow update.
 constexpr uint8_t MAX_MOVES_PER_STEP = 4;
 
-// A new orientation must remain stable for this duration
-// before the matrix display is rotated.
-constexpr uint32_t POSITION_STABLE_MS = 400;
+// Minimum downhill movement required before a pixel moves.
+constexpr float MIN_FLOW_PROJECTION = 0.12f;
 
-// Accelerometer thresholds matching DisplayManager
-// and SandClock orientation detection.
+// Gravity-vector low-pass filtering.
+// Higher values respond faster but can produce more jitter.
+constexpr float GRAVITY_FILTER_ALPHA = 0.35f;
+
+// ------------------------------------------------------------
+// AUTOMATIC DISPLAY ORIENTATION
+// ------------------------------------------------------------
+
+// These thresholds match SandClock orientation detection.
 constexpr int16_t GRAVITY_THRESHOLD = 10000;
 constexpr int16_t DIAGONAL_THRESHOLD = 9000;
 
-// Minimum downhill movement required before a pixel moves.
-// This helps prevent small sensor fluctuations from moving water.
-constexpr float MIN_FLOW_PROJECTION = 0.12f;
-
-// ------------------------------------------------------------
-// WATER FRAMEBUFFER
-// ------------------------------------------------------------
-
-// Logical 16x8 water framebuffer.
-//
-// water[y][x]:
-//     true  = water pixel ON
-//     false = empty position
-//
-// The total number of true cells must always remain 64.
-bool water[MATRIX_HEIGHT][MATRIX_WIDTH] = {};
-
-// Animation state.
-bool initialized = false;
-
-uint32_t lastFlowStepMs = 0;
-
-// Rotating scan start prevents movement selection from
-// always favouring the same framebuffer coordinates.
-uint16_t scanCursor = 0;
-
-// ------------------------------------------------------------
-// AUTOMATIC WATER ANIMATION ORIENTATION
-// ------------------------------------------------------------
+constexpr uint32_t POSITION_STABLE_MS = 400;
 
 // Current complete matrix orientation.
 bool upsideDown = false;
@@ -80,60 +71,122 @@ bool orientationCandidateValid = false;
 uint32_t candidateOrientationSinceMs = 0;
 
 // ------------------------------------------------------------
-// GRAVITY DIRECTION
+// WATER FRAMEBUFFER
 // ------------------------------------------------------------
 
-// These signs define how MPU6050 pitch and roll map to
-// the logical MAX7219 framebuffer.
+// Physical 8x16 framebuffer.
 //
-// Change one sign to -1.0f if the water moves in the
-// opposite direction from the physical tilt.
+// water[y][x]:
+//     true  = water pixel ON.
+//     false = empty position.
 //
-// Default:
-//     Positive roll  -> positive X direction.
-//     Positive pitch -> positive Y direction.
-constexpr float FLOW_X_SIGN = 1.0f;
-constexpr float FLOW_Y_SIGN = 1.0f;
+// Total number of occupied cells must remain 64.
+bool water[MATRIX_HEIGHT][MATRIX_WIDTH] = {};
 
-float gravityX = 0.0f;
-float gravityY = 1.0f;
+// Animation state.
+bool initialized = false;
+
+uint32_t lastFlowStepMs = 0;
+
+// Rotating scan start prevents movement selection from
+// consistently favouring the same framebuffer coordinates.
+uint16_t scanCursor = 0;
 
 // ------------------------------------------------------------
-// UPDATE WATER ORIENTATION
+// HOURGLASS TANK SHAPE
 // ------------------------------------------------------------
 
 /*
- * UPDATE WATER ORIENTATION
+ * WIDTH OF EACH CHAMBER ROW
  *
- * Uses the same accelerometer thresholds and stability period
- * as DisplayManager and SandClock.
+ * Each chamber starts wide at its outer end and narrows
+ * towards the central connection.
  *
- * Normal position:
- *     AZ < -10000
+ * Row 0: 8 pixels.
+ * Row 1: 8 pixels.
+ * Row 2: 6 pixels.
+ * Row 3: 6 pixels.
+ * Row 4: 4 pixels.
+ * Row 5: 4 pixels.
+ * Row 6: 2 pixels.
+ * Row 7: 2 pixels.
  *
- * Upside-down position:
- *     AZ > +10000
+ * The lower chamber uses the same shape mirrored vertically.
  *
- * Diagonal position:
- *     AX > 9000 && AY > 9000
+ * Total permitted cells:
+ *     40 upper + 40 lower = 80 cells.
  *
- * Sideways and transition positions are ignored.
- *
- * The previously selected display orientation is maintained
- * while the device is moving or held sideways.
- *
- * Returns true when the active orientation changes.
+ * Water volume:
+ *     64 cells.
  */
-bool updateUpsideDownOrientation(uint32_t nowMs)
-{
-    MPU6050::Data imu{};
+constexpr uint8_t CHAMBER_WIDTH[MATRIX_WIDTH] = {
+    8, 8, 6, 6, 4, 4, 2, 2
+};
 
-    if (!MPU6050::getData(imu) || !imu.valid) {
+/*
+ * CHECK TANK BOUNDARY
+ *
+ * Returns true only when a coordinate is inside the
+ * hourglass-shaped liquid container.
+ *
+ * The narrowest point is between rows 7 and 8.
+ */
+bool isInsideTank(uint8_t x, uint8_t y)
+{
+    if (x >= MATRIX_WIDTH || y >= MATRIX_HEIGHT) {
         return false;
     }
 
-    // Match the diagonal-position detection precedence
-    // used by DisplayManager.
+    // Convert the lower chamber row into its mirrored
+    // upper chamber row.
+    const uint8_t chamberRow =
+        (y < 8) ? y : (uint8_t)(15 - y);
+
+    const uint8_t allowedWidth =
+        CHAMBER_WIDTH[chamberRow];
+
+    const uint8_t leftBoundary =
+        (uint8_t)((MATRIX_WIDTH - allowedWidth) / 2);
+
+    const uint8_t rightBoundary =
+        (uint8_t)(leftBoundary + allowedWidth);
+
+    return (x >= leftBoundary && x < rightBoundary);
+}
+
+// ------------------------------------------------------------
+// AUTOMATIC DISPLAY ORIENTATION
+// ------------------------------------------------------------
+
+/*
+ * UPDATE WATER DISPLAY ORIENTATION
+ *
+ * Uses the same accelerometer thresholds and stability
+ * period as SandClock.
+ *
+ * Normal position:
+ *     AZ < -10000.
+ *
+ * Upside-down position:
+ *     AZ > +10000.
+ *
+ * Diagonal position:
+ *     AX > 9000 && AY > 9000.
+ *
+ * Sideways and transition positions are ignored for
+ * display rotation.
+ *
+ * Water gravity calculation is NOT ignored during sideways
+ * movement. The liquid must continue responding to tilt.
+ *
+ * Returns true when the active display orientation changes.
+ */
+bool updateUpsideDownOrientation(
+    const MPU6050::Data &imu,
+    uint32_t nowMs
+)
+{
+    // Match SandClock's diagonal-position detection precedence.
     if (imu.axRaw > DIAGONAL_THRESHOLD &&
         imu.ayRaw > DIAGONAL_THRESHOLD)
     {
@@ -143,7 +196,6 @@ bool updateUpsideDownOrientation(uint32_t nowMs)
 
     bool detectedUpsideDown;
 
-    // Detect the two main hourglass orientations.
     if (imu.azRaw > GRAVITY_THRESHOLD)
     {
         detectedUpsideDown = true;
@@ -177,7 +229,7 @@ bool updateUpsideDownOrientation(uint32_t nowMs)
         return false;
     }
 
-    // Change the display orientation only when necessary.
+    // Change the complete display orientation only when necessary.
     if (upsideDown != candidateUpsideDown)
     {
         upsideDown = candidateUpsideDown;
@@ -188,74 +240,106 @@ bool updateUpsideDownOrientation(uint32_t nowMs)
 }
 
 // ------------------------------------------------------------
-// UPDATE GRAVITY DIRECTION
+// GRAVITY DIRECTION
 // ------------------------------------------------------------
+
+// Gravity in the physical simulation coordinate system.
+//
+// X = horizontal direction.
+// Y = vertical direction (positive means upper to lower).
+//
+// Initial upright gravity points towards the lower chamber.
+float gravityX = 0.0f;
+float gravityY = 1.0f;
+
+bool gravityInitialized = false;
+
+// Signs can be adjusted if physical movement is reversed.
+constexpr float FLOW_X_SIGN = 1.0f;
+constexpr float FLOW_Y_SIGN = 1.0f;
 
 /*
  * UPDATE GRAVITY DIRECTION
  *
- * Uses the filtered MPU6050 pitch and roll angles.
+ * MPU6050 mounting in EMOTIX360:
  *
- * Pitch controls the logical Y-axis gravity component.
- * Roll controls the logical X-axis gravity component.
+ *     X+ points towards the user (normal to the display).
+ *     Y+ points towards the left.
+ *     Z+ points downwards in the normal device position.
  *
- * The vector is normalized so the movement algorithm can
- * compare horizontal, vertical and diagonal movements.
+ * Therefore, Y and Z are the two useful accelerometer
+ * axes for estimating gravity on the display plane.
  *
- * When the device is approximately level, use the default
- * downward direction along positive Y.
+ * The MPU6050's measured acceleration is opposite to the
+ * physical gravity direction at rest.
  *
- * When upside down, reverse the gravity direction in the
- * logical framebuffer.
+ * Current confirmed normal position:
+ *     AZ is negative.
+ *
+ * Mapping:
+ *     Gravity X = +AY.
+ *     Gravity Y = -AZ.
+ *
+ * FLOW_X_SIGN and FLOW_Y_SIGN allow calibration if the
+ * physical matrix mapping requires reversing an axis.
+ *
+ * When the device turns upside down, the accelerometer
+ * vector itself changes direction. Do not reverse it again
+ * using upsideDown; that would double-invert gravity.
  */
-void updateGravityDirection()
+void updateGravityDirection(const MPU6050::Data &imu)
 {
-    MPU6050::Data imu{};
+    // Calculate the in-plane gravity vector.
+    float gx = imu.ayG * FLOW_X_SIGN;
+    float gy = -imu.azG * FLOW_Y_SIGN;
 
-    if (!MPU6050::getData(imu) || !imu.valid) {
-        return;
-    }
-
-    constexpr float RADIANS_PER_DEGREE =
-    0.017453292519943295f;
-
-    const float pitchRad =
-        imu.pitchDeg * RADIANS_PER_DEGREE;
-
-    const float rollRad =
-        imu.rollDeg * RADIANS_PER_DEGREE;
-
-    // Calculate the gravity projection along the display plane.
-    float gx = sinf(rollRad) * FLOW_X_SIGN;
-    float gy = sinf(pitchRad) * FLOW_Y_SIGN;
-
-    // Normalize the gravity vector.
+    // Normalize the vector.
     const float magnitude =
         sqrtf((gx * gx) + (gy * gy));
 
+    // When gravity is nearly perpendicular to the display,
+    // there is no meaningful in-plane flow direction.
     if (magnitude < 0.08f)
     {
-        // No meaningful in-plane tilt detected.
-        // Keep the water settled towards the default bottom.
-        gx = 0.0f;
-        gy = 1.0f;
-    }
-    else
-    {
-        gx /= magnitude;
-        gy /= magnitude;
+        gravityX = 0.0f;
+        gravityY = 0.0f;
+        gravityInitialized = true;
+
+        return;
     }
 
-    // A 180-degree device flip reverses the gravity direction
-    // in the logical matrix coordinate system.
-    if (upsideDown)
+    gx /= magnitude;
+    gy /= magnitude;
+
+    // Initialize the filter using the first valid sensor sample.
+    if (!gravityInitialized)
     {
-        gx = -gx;
-        gy = -gy;
+        gravityX = gx;
+        gravityY = gy;
+
+        gravityInitialized = true;
+        return;
     }
 
-    gravityX = gx;
-    gravityY = gy;
+    // Low-pass filter the gravity vector to reduce jitter.
+    gravityX +=
+        GRAVITY_FILTER_ALPHA * (gx - gravityX);
+
+    gravityY +=
+        GRAVITY_FILTER_ALPHA * (gy - gravityY);
+
+    // Normalize the filtered vector again.
+    const float filteredMagnitude =
+        sqrtf(
+            (gravityX * gravityX) +
+            (gravityY * gravityY)
+        );
+
+    if (filteredMagnitude > 0.001f)
+    {
+        gravityX /= filteredMagnitude;
+        gravityY /= filteredMagnitude;
+    }
 }
 
 // ------------------------------------------------------------
@@ -265,120 +349,129 @@ void updateGravityDirection()
 /*
  * INITIAL WATER DISTRIBUTION
  *
- * The logical framebuffer contains two 8x8 chambers:
+ * The two chambers each contain 32 water pixels.
  *
- *     X = 0..7   Slave chamber
- *     X = 8..15  Master chamber
+ * Upper chamber:
+ *     Fill rows 1..7, towards the central neck.
  *
- * Initially, each chamber contains 32 water pixels.
+ * Lower chamber:
+ *     Fill rows 11..15, towards the outer bottom.
  *
- * Rows 4..7 are ON in both chambers.
+ * Total:
+ *     32 + 32 = 64 water pixels.
  *
- * Initial water count:
- *     16 columns x 4 rows = 64 pixels.
- *
- * Every subsequent movement exchanges one occupied cell
- * with one empty cell, preserving the total water count.
+ * Every occupied cell is inside the hourglass boundary.
  */
 void initializeWater()
 {
     memset(water, 0, sizeof(water));
 
-    for (uint8_t y = MATRIX_SIZE / 2;
-         y < MATRIX_HEIGHT;
-         ++y)
+    // Fill the upper chamber near the central neck.
+    for (uint8_t y = 1; y < MATRIX_SIZE; ++y)
     {
-        for (uint8_t x = 0;
-             x < MATRIX_WIDTH;
-             ++x)
+        for (uint8_t x = 0; x < MATRIX_WIDTH; ++x)
         {
-            water[y][x] = true;
+            if (isInsideTank(x, y)) {
+                water[y][x] = true;
+            }
+        }
+    }
+
+    // Fill the lower chamber towards its outer bottom.
+    for (uint8_t y = 11; y < MATRIX_HEIGHT; ++y)
+    {
+        for (uint8_t x = 0; x < MATRIX_WIDTH; ++x)
+        {
+            if (isInsideTank(x, y)) {
+                water[y][x] = true;
+            }
         }
     }
 }
 
 // ------------------------------------------------------------
-// WATER PIXEL ROTATION
+// WATER PIXEL MAPPING
 // ------------------------------------------------------------
 
 /*
  * SET WATER PIXEL
  *
- * The WaterAnimation uses a logical 16x8 framebuffer:
+ * Input coordinates use the physical 8x16 simulation grid.
  *
- *     X = 0..7    Slave module
- *     X = 8..15   Master module
+ * Upper slave module:
+ *     Simulation Y = 0..7.
  *
- * Normal orientation:
- *     Draw pixels at their original coordinates.
+ * Lower master module:
+ *     Simulation Y = 8..15.
  *
- * Upside-down orientation:
+ * MAX7219 driver mapping:
+ *     Upper slave: X = 0..7.
+ *     Lower master: X = 8..15.
  *
- *     SLAVE MODULE:
- *         Moves to the opposite module position.
- *         Rotates 90 degrees clockwise.
+ * Upside-down rotation uses the same transformation
+ * already tested successfully in SandClock:
  *
- *         New X = 8 + 7 - Old Y
- *         New Y = Old X
+ *     SLAVE:
+ *         Swap to master.
+ *         Rotate 90 degrees clockwise.
  *
- *     MASTER MODULE:
- *         Moves to the opposite module position.
- *         Rotates 90 degrees anticlockwise.
- *
- *         New X = Old Y
- *         New Y = 7 - (Old X - 8)
- *
- * This uses the same module transformation as SandClock.
+ *     MASTER:
+ *         Swap to slave.
+ *         Rotate 90 degrees anticlockwise.
  */
 void setWaterPixel(uint8_t x, uint8_t y, uint8_t state)
 {
-    // Protect against invalid framebuffer coordinates.
     if (x >= MATRIX_WIDTH || y >= MATRIX_HEIGHT) {
         return;
     }
 
+    // Convert physical coordinates to MAX7219 driver coordinates.
+    uint8_t driverX =
+        (uint8_t)(x + ((y >= MATRIX_SIZE) ? MATRIX_SIZE : 0));
+
+    uint8_t driverY =
+        (uint8_t)(y % MATRIX_SIZE);
+
     if (upsideDown)
     {
         // Preserve the original coordinates before transformation.
-        const uint8_t oldX = x;
-        const uint8_t oldY = y;
+        const uint8_t oldX = driverX;
+        const uint8_t oldY = driverY;
 
         if (oldX < MATRIX_SIZE)
         {
             // ------------------------------------------------
             // SLAVE MODULE
-            // Move to the opposite module position.
+            // Swap to master.
             // Rotate 90 degrees CLOCKWISE.
             // ------------------------------------------------
 
-            const uint8_t localX = oldX;
-
-            x = (uint8_t)(
+            driverX = (uint8_t)(
                 MATRIX_SIZE + (MATRIX_SIZE - 1 - oldY)
             );
 
-            y = localX;
+            driverY = oldX;
         }
         else
         {
             // ------------------------------------------------
             // MASTER MODULE
-            // Move to the opposite module position.
+            // Swap to slave.
             // Rotate 90 degrees ANTICLOCKWISE.
             // ------------------------------------------------
 
             const uint8_t localX =
                 (uint8_t)(oldX - MATRIX_SIZE);
 
-            x = oldY;
+            driverX = oldY;
 
-            y = (uint8_t)(
+            driverY = (uint8_t)(
                 MATRIX_SIZE - 1 - localX
             );
         }
     }
 
-    MAX7219_SetPixel(x, y, state);
+    MAX7219_SetPixel(driverX, driverY, state);
 }
 
 // ------------------------------------------------------------
@@ -388,9 +481,9 @@ void setWaterPixel(uint8_t x, uint8_t y, uint8_t state)
 /*
  * RENDER WATER FRAME
  *
- * Every occupied framebuffer cell is drawn.
+ * Draw every occupied cell in the physical 8x16 framebuffer.
  *
- * The framebuffer always contains exactly 64 water pixels.
+ * The water count remains exactly 64.
  */
 void render()
 {
@@ -417,8 +510,7 @@ void render()
 /*
  * TRY TO MOVE ONE WATER PIXEL
  *
- * Each water pixel can move to one of its eight neighbouring
- * positions:
+ * A water pixel can move to one of its eight neighbouring cells.
  *
  *     NW   N   NE
  *      \   |   /
@@ -431,12 +523,13 @@ void render()
  * A movement is allowed only when:
  *
  * 1. The starting position contains water.
- * 2. The destination is inside the 16x8 framebuffer.
- * 3. The destination is currently empty.
- * 4. The movement is in the gravity direction.
+ * 2. The destination is inside the 8x16 framebuffer.
+ * 3. The destination is inside the hourglass tank.
+ * 4. The destination is currently empty.
+ * 5. The movement has a sufficient downhill projection.
  *
- * The movement with the strongest downhill projection
- * is selected.
+ * The movement with the strongest normalized downhill
+ * projection is selected.
  *
  * Exactly one water pixel moves during this function.
  *
@@ -445,15 +538,15 @@ void render()
 bool moveOneWaterPixel()
 {
     constexpr int8_t NEIGHBOUR_X[8] = {
-        0,  1, -1,
-        1, -1,
-        0,  1, -1
+         0,  1, -1,
+         1, -1,
+         0,  1, -1
     };
 
     constexpr int8_t NEIGHBOUR_Y[8] = {
-        1,  1,  1,
-        0,  0,
-       -1, -1, -1
+         1,  1,  1,
+         0,  0,
+        -1, -1, -1
     };
 
     float bestProjection = MIN_FLOW_PROJECTION;
@@ -463,19 +556,15 @@ bool moveOneWaterPixel()
     int8_t bestToX = -1;
     int8_t bestToY = -1;
 
-    // Rotate the scan start to avoid consistently favouring
-    // the same framebuffer positions when several movements
-    // have the same gravity projection.
+    // Rotate scan start to reduce directional selection bias.
     const uint16_t scanStart = scanCursor;
 
     scanCursor = (uint16_t)(
         (scanCursor + 17) % CELL_TOTAL
     );
 
-    // Search the complete 16x8 framebuffer.
-    for (uint16_t scan = 0;
-         scan < CELL_TOTAL;
-         ++scan)
+    // Search the complete physical 8x16 framebuffer.
+    for (uint16_t scan = 0; scan < CELL_TOTAL; ++scan)
     {
         const uint16_t index =
             (uint16_t)((scanStart + scan) % CELL_TOTAL);
@@ -491,7 +580,7 @@ bool moveOneWaterPixel()
             continue;
         }
 
-        // Check the eight neighbouring cells.
+        // Check all eight neighbouring cells.
         for (uint8_t direction = 0;
              direction < 8;
              ++direction)
@@ -520,16 +609,25 @@ bool moveOneWaterPixel()
             const uint8_t toY =
                 (uint8_t)destinationY;
 
+            // The destination must be inside the tank.
+            if (!isInsideTank(toX, toY)) {
+                continue;
+            }
+
             // Water cannot move into an occupied cell.
             if (water[toY][toX]) {
                 continue;
             }
 
-            // Calculate the movement projection onto gravity.
-            const float projection =
-                (dx * gravityX) + (dy * gravityY);
+            // Calculate movement projection onto gravity.
+            // Normalize diagonal movement to avoid diagonal bias.
+            const float distance =
+                (dx != 0 && dy != 0) ? 1.41421356f : 1.0f;
 
-            // Reject movements that are sideways or uphill.
+            const float projection =
+                ((dx * gravityX) + (dy * gravityY)) / distance;
+
+            // Reject sideways and uphill movements.
             if (projection <= bestProjection) {
                 continue;
             }
@@ -553,7 +651,8 @@ bool moveOneWaterPixel()
         return false;
     }
 
-    // Move one water pixel without changing the total count.
+    // Exchange one occupied cell with one empty cell.
+    // The total water count is preserved.
     water[(uint8_t)bestFromY][(uint8_t)bestFromX] = false;
     water[(uint8_t)bestToY][(uint8_t)bestToX] = true;
 
@@ -567,21 +666,16 @@ bool moveOneWaterPixel()
 /*
  * UPDATE WATER FLOW
  *
- * Refresh the gravity vector from the MPU6050.
- *
  * Move up to MAX_MOVES_PER_STEP water pixels in the
- * detected gravity direction.
+ * current detected gravity direction.
  *
- * Every movement exchanges one occupied cell with one
- * empty cell. Therefore, the total number of water pixels
- * remains exactly 64.
+ * Each movement exchanges an occupied cell with an empty cell.
+ * The total water count therefore remains exactly 64.
  *
- * Returns true when at least one water pixel moves.
+ * Returns true if at least one water pixel moves.
  */
 bool updateWaterFlow()
 {
-    updateGravityDirection();
-
     bool waterMoved = false;
 
     for (uint8_t i = 0;
@@ -616,14 +710,17 @@ void reset(uint32_t nowMs)
         initialized = true;
     }
 
-    // Detect the current device orientation before rendering.
-    updateUpsideDownOrientation(nowMs);
+    // Read a safe MPU6050 snapshot.
+    MPU6050::Data imu{};
 
-    // Create the initial 64-pixel water distribution.
+    if (MPU6050::getData(imu) && imu.valid)
+    {
+        updateUpsideDownOrientation(imu, nowMs);
+        updateGravityDirection(imu);
+    }
+
+    // Generate the initial 64-pixel water distribution.
     initializeWater();
-
-    // Update gravity using the current MPU6050 reading.
-    updateGravityDirection();
 
     scanCursor = 0;
     lastFlowStepMs = nowMs;
@@ -639,14 +736,20 @@ void update(uint32_t nowMs)
         return;
     }
 
-    // Detect orientation changes continuously.
-    // When the device becomes upside down or returns to normal,
-    // redraw the complete water framebuffer using the new
-    // slave/master module rotation.
-    if (updateUpsideDownOrientation(nowMs))
+    bool frameChanged = false;
+
+    // Read one consistent MPU6050 snapshot for this update.
+    MPU6050::Data imu{};
+
+    if (MPU6050::getData(imu) && imu.valid)
     {
-        updateGravityDirection();
-        render();
+        // Detect automatic display orientation changes.
+        if (updateUpsideDownOrientation(imu, nowMs)) {
+            frameChanged = true;
+        }
+
+        // Update gravity continuously from the sensor.
+        updateGravityDirection(imu);
     }
 
     // Run the water simulation at a controlled interval.
@@ -654,11 +757,14 @@ void update(uint32_t nowMs)
     {
         lastFlowStepMs = nowMs;
 
-        // Render only when at least one water pixel moves.
-        if (updateWaterFlow())
-        {
-            render();
+        if (updateWaterFlow()) {
+            frameChanged = true;
         }
+    }
+
+    // Render only when the display contents have changed.
+    if (frameChanged) {
+        render();
     }
 }
 

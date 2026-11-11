@@ -246,12 +246,7 @@ void updateAutomaticRotation()
 
     MPU6050::Data imu;
 
-    if (!MPU6050::getData(imu)) {
-        // Display unavailable sensor data.
-        return;
-    }
-
-    if (!imu.valid) {
+    if (!MPU6050::getData(imu) || !imu.valid) {
         return;
     }
 

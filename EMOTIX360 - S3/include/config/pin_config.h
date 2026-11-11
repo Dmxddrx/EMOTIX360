@@ -17,6 +17,11 @@ constexpr uint8_t MATRIX_CLK  = 12;
 constexpr uint8_t MATRIX_MOSI = 11;
 constexpr uint8_t MATRIX_CS   = 10;
 
+// Buttons
+// Animation selection tactile button.
+// Active LOW: button connects GPIO14 to GND when pressed.
+constexpr uint8_t BUTTON_ANIMATION = 14;
+
 }
 
 #endif

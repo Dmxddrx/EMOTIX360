@@ -6,6 +6,8 @@
 #include "device_config.h"
 #include "wifi_manager.h"
 #include "max7219.h"
+#include "animation_manager.h"
+#include "button.h"
 
 #include <Arduino.h>
 
@@ -231,7 +233,44 @@ bool begin()
         mpuTaskStarted ? "STARTED" : "FAILED"
     );
 
+    // ------------------------------------------------------------
+    // INITIALIZE ANIMATION MANAGER AND BUTTON
+    // ------------------------------------------------------------
 
+    // Keep this initial mode identical in both managers.
+    constexpr AnimationManager::Mode INITIAL_ANIMATION_MODE =
+        AnimationManager::Mode::WATER;
+
+    // Change to Mode::SAND_CLOCK if you prefer SandClock at startup.
+
+    bool animationReady = false;
+    bool buttonTaskStarted = false;
+
+    if (matrixReady && mpuTaskStarted)
+    {
+        if (AnimationManager::begin(INITIAL_ANIMATION_MODE))
+        {
+            animationReady = AnimationManager::startTask();
+        }
+
+        if (animationReady)
+        {
+            if (ButtonManager::begin(INITIAL_ANIMATION_MODE))
+            {
+                buttonTaskStarted = ButtonManager::startTask();
+            }
+        }
+    }
+
+    Serial.printf(
+        "[GENERAL] Animation Manager: %s\n",
+        animationReady ? "STARTED" : "FAILED"
+    );
+
+    Serial.printf(
+        "[GENERAL] Button Manager: %s\n",
+        buttonTaskStarted ? "STARTED" : "FAILED"
+    );
 
     // INITIALIZE WIFI MANAGER
     const bool wifiInitialized = WifiManager::begin();
@@ -289,6 +328,8 @@ bool begin()
     return mpuTaskStarted &&
        serialTaskStarted &&
        matrixReady &&
+       animationReady &&
+       buttonTaskStarted &&
        (!DeviceConfig::OLED_ENABLED || oledTaskStarted);
 }
 

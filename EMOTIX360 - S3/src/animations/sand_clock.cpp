@@ -1,6 +1,5 @@
 #include "sand_clock.h"
 #include "max7219.h"
-#include "display_manager.h"
 #include "mpu6050.h"  
 
 #include <esp_random.h> // ESP32-S3 hardware random number generator
@@ -260,7 +259,7 @@ void shufflePriorityGroup(uint8_t *leds, uint8_t count)
         return;
     }
 
-    // Fisher-Yates shuffle using the ESP32-C3 hardware RNG.
+    // Fisher-Yates shuffle using the ESP32-S3 hardware RNG.
     for (int16_t i = (int16_t)count - 1; i > 0; --i)
     {
         const uint8_t j =
