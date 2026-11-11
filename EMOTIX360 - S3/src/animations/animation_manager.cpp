@@ -5,6 +5,9 @@
 #include "sand_clock.h"
 #include "water_animation.h"
 #include "sand_gravity.h"
+#include "small_animations.h"
+
+#include <Arduino.h>
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -32,61 +35,150 @@ TaskHandle_t animationTaskHandle = nullptr;
 bool initialized = false;
 
 // ------------------------------------------------------------
+// SMALL ANIMATION MODE HELPERS
+// ------------------------------------------------------------
+
+// Check whether a mode belongs to the SmallAnimations module.
+bool isSmallAnimationMode(Mode mode)
+{
+    switch (mode) {
+        case Mode::SMALL_ANIMATIONS:
+        case Mode::HEART:
+        case Mode::RAIN:
+        case Mode::WAVES:
+            return true;
+
+        default:
+            return false;
+    }
+}
+
+
+// Convert an AnimationManager mode into its corresponding
+// SmallAnimations effect.
+SmallAnimations::Effect getSmallAnimationEffect(Mode mode)
+{
+    switch (mode) {
+        case Mode::HEART:
+            return SmallAnimations::Effect::HEART;
+
+        case Mode::RAIN:
+            return SmallAnimations::Effect::RAIN;
+
+        case Mode::WAVES:
+            return SmallAnimations::Effect::WAVES;
+
+        case Mode::SMALL_ANIMATIONS:
+        default:
+            return SmallAnimations::Effect::STARTUP;
+    }
+}
+
+// ------------------------------------------------------------
 // MODE TRANSITION
 // ------------------------------------------------------------
 
-void applyMode(Mode requestedMode, Mode &activeMode)
+/*
+ * APPLY MODE
+ *
+ * The activeMode parameter is passed by reference because
+ * it belongs to the AnimationManager task.
+ *
+ * SmallAnimations contains four selectable effects:
+ *
+ *     STARTUP
+ *     HEART
+ *     RAIN
+ *     WAVES
+ *
+ * These effects share the same SmallAnimations module.
+ */
+void applyMode(Mode newMode, Mode &activeMode)
 {
-    // Do nothing if the requested mode is already active.
-    if (requestedMode == activeMode) {
+    // Ignore requests for the currently active mode.
+    if (newMode == activeMode) {
         return;
     }
 
-    // Clear the previous animation before changing modes.
-    if (activeMode == Mode::SAND_CLOCK ||
-        activeMode == Mode::WATER ||
-        activeMode == Mode::SAND_GRAVITY)
-    {
-        MAX7219_Clear();
-        MAX7219_Update();
+    const bool wasSmallAnimation =
+        isSmallAnimationMode(activeMode);
+
+    const bool isNewSmallAnimation =
+        isSmallAnimationMode(newMode);
+
+
+    // --------------------------------------------------------
+    // EXIT CURRENT MODULE
+    // --------------------------------------------------------
+
+    // Restore brightness when leaving SmallAnimations entirely.
+    //
+    // Do not call end() when switching between HEART, RAIN,
+    // WAVES, and STARTUP because they share the same module.
+    if (wasSmallAnimation && !isNewSmallAnimation) {
+        SmallAnimations::end();
     }
 
-    activeMode = requestedMode;
 
-    switch (activeMode)
-    {
-        case Mode::SAND_CLOCK:
-        {
-            // Start a fresh SandClock animation cycle.
-            SandClock::begin();
+    // --------------------------------------------------------
+    // DISPLAY CLEAR
+    // --------------------------------------------------------
 
-            Serial.println("[ANIMATION] SandClock activated");
-            break;
-        }
+    // Restore your existing MAX7219 matrix-clear operation here.
+    //
+    // I have not assumed a clear-function name because the
+    // max7219.h API was not included in the supplied code.
+    //
+    // Make sure the display is cleared when entering IDLE.
 
-        case Mode::WATER:
-        {
-            WaterAnimation::begin();
 
-            Serial.println("[ANIMATION] WaterAnimation activated");
-            break;
-        }
+    // --------------------------------------------------------
+    // START NEW MODULE
+    // --------------------------------------------------------
 
-        case Mode::SAND_GRAVITY:
-        {
-            SandGravity::begin();
-
-            Serial.println("[ANIMATION] SandGravity activated");
-            break;
-        }
+    switch (newMode) {
 
         case Mode::IDLE:
-        default:
-        {
-            Serial.println("[ANIMATION] Matrix animations disabled");
+            // No animation. The matrix should remain blank.
             break;
-        }
+
+
+        case Mode::SAND_CLOCK:
+            SandClock::begin();
+            break;
+
+
+        case Mode::WATER:
+            WaterAnimation::begin();
+            break;
+
+
+        case Mode::SAND_GRAVITY:
+            SandGravity::begin();
+            break;
+
+
+        case Mode::SMALL_ANIMATIONS:
+        case Mode::HEART:
+        case Mode::RAIN:
+        case Mode::WAVES:
+
+            // Initialise SmallAnimations only when entering
+            // from a different animation module.
+            if (!wasSmallAnimation) {
+                SmallAnimations::begin();
+            }
+
+            // Select the requested individual effect.
+            SmallAnimations::setEffect(
+                getSmallAnimationEffect(newMode)
+            );
+
+            break;
     }
+
+    // Record the newly active mode.
+    activeMode = newMode;
 }
 
 // ------------------------------------------------------------
@@ -126,32 +218,35 @@ void animationTask(void *parameter)
         const uint32_t nowMs = millis();
 
         // Only the AnimationManager task updates the matrix.
-        switch (activeMode)
-        {
-            case Mode::SAND_CLOCK:
-            {
-                SandClock::update(nowMs);
-                break;
-            }
-
-            case Mode::WATER:
-            {
-                WaterAnimation::update(nowMs);
-                break;
-            }
-
-            case Mode::SAND_GRAVITY:
-            {
-                SandGravity::update(nowMs);
-                break;
-            }
+        switch (activeMode) {
 
             case Mode::IDLE:
-            default:
-            {
-                // Nothing to animate.
+                // Nothing to update.
                 break;
-            }
+
+
+            case Mode::SAND_CLOCK:
+                SandClock::update(nowMs);
+                break;
+
+
+            case Mode::WATER:
+                WaterAnimation::update(nowMs);
+                break;
+
+
+            case Mode::SAND_GRAVITY:
+                SandGravity::update(nowMs);
+                break;
+
+
+            case Mode::SMALL_ANIMATIONS:
+            case Mode::HEART:
+            case Mode::RAIN:
+            case Mode::WAVES:
+                // All four effects are updated by the same module.
+                SmallAnimations::update(nowMs);
+                break;
         }
 
         // Wait until the next scheduled animation update.
@@ -196,6 +291,7 @@ bool begin(Mode initialMode)
     return true;
 }
 
+
 bool startTask()
 {
     if (!initialized || modeQueue == nullptr) {
@@ -228,6 +324,7 @@ bool startTask()
     return true;
 }
 
+
 bool setMode(Mode mode)
 {
     if (!initialized || modeQueue == nullptr) {
@@ -237,6 +334,7 @@ bool setMode(Mode mode)
     // Queue length is one, so newer requests replace older ones.
     return xQueueOverwrite(modeQueue, &mode) == pdPASS;
 }
+
 
 bool isTaskRunning()
 {

@@ -163,25 +163,11 @@ bool begin()
         matrixReady ? "INITIALIZED" : "FAILED"
     );
 
-    if (matrixReady) {
-
+    if (matrixReady)
+    {
+        // Start with a clean framebuffer.
+        // SmallAnimations will perform the startup border effect.
         MAX7219_Clear();
-
-        // Draw the outer boundary of both 8x8 modules.
-        for (int16_t x = 0; x < 16; ++x) {
-            MAX7219_SetPixel(x, 0, 1);
-            MAX7219_SetPixel(x, 7, 1);
-        }
-
-        for (int16_t y = 0; y < 8; ++y) {
-
-            MAX7219_SetPixel(0, y, 1);
-            MAX7219_SetPixel(7, y, 1);
-
-            MAX7219_SetPixel(8, y, 1);
-            MAX7219_SetPixel(15, y, 1);
-        }
-
         MAX7219_Update();
     }
 
@@ -239,7 +225,7 @@ bool begin()
 
     // Keep this initial mode identical in both managers.
     constexpr AnimationManager::Mode INITIAL_ANIMATION_MODE =
-        AnimationManager::Mode::SAND_GRAVITY;
+        AnimationManager::Mode::IDLE;
 
     // Change to Mode::SAND_CLOCK if you prefer SandClock at startup.
 

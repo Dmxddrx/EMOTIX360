@@ -43,81 +43,102 @@ AnimationManager::Mode currentMode =
 // ------------------------------------------------------------
 
 /*
- * TOGGLE ANIMATION MODE
+ * BUTTON ANIMATION SEQUENCE
  *
- * Animation sequence:
+ *     IDLE
+ *       |
+ *       v
+ *   SAND_CLOCK
+ *       |
+ *       v
+ *     WATER
+ *       |
+ *       v
+ *  SAND_GRAVITY
+ *       |
+ *       v
+ * SMALL_ANIMATIONS
+ *       |
+ *       v
+ *     HEART
+ *       |
+ *       v
+ *      RAIN
+ *       |
+ *       v
+ *     WAVES
+ *       |
+ *       v
+ *      IDLE
  *
- *     SAND_CLOCK
- *          |
- *          v
- *       WATER
- *          |
- *          v
- *     SAND_GRAVITY
- *          |
- *          v
- *     SAND_CLOCK
- *
- * The original SandClock and both physics simulations
- * are controlled by AnimationManager.
+ * All modes are controlled by AnimationManager.
  */
-void toggleAnimation()
+
+// Return the next animation mode in button sequence.
+AnimationManager::Mode getNextMode(
+    AnimationManager::Mode currentMode)
 {
-    AnimationManager::Mode nextMode;
-
-    switch (currentMode)
-    {
-        case AnimationManager::Mode::SAND_CLOCK:
-        {
-            nextMode = AnimationManager::Mode::WATER;
-            break;
-        }
-
-        case AnimationManager::Mode::WATER:
-        {
-            nextMode = AnimationManager::Mode::SAND_GRAVITY;
-            break;
-        }
-
-        case AnimationManager::Mode::SAND_GRAVITY:
-        {
-            nextMode = AnimationManager::Mode::SAND_CLOCK;
-            break;
-        }
+    switch (currentMode) {
 
         case AnimationManager::Mode::IDLE:
-        default:
-        {
-            nextMode = AnimationManager::Mode::SAND_CLOCK;
-            break;
-        }
-    }
+            return AnimationManager::Mode::SAND_CLOCK;
 
+
+        case AnimationManager::Mode::SAND_CLOCK:
+            return AnimationManager::Mode::WATER;
+
+
+        case AnimationManager::Mode::WATER:
+            return AnimationManager::Mode::SAND_GRAVITY;
+
+
+        case AnimationManager::Mode::SAND_GRAVITY:
+            return AnimationManager::Mode::SMALL_ANIMATIONS;
+
+
+        case AnimationManager::Mode::SMALL_ANIMATIONS:
+            return AnimationManager::Mode::HEART;
+
+
+        case AnimationManager::Mode::HEART:
+            return AnimationManager::Mode::RAIN;
+
+
+        case AnimationManager::Mode::RAIN:
+            return AnimationManager::Mode::WAVES;
+
+
+        case AnimationManager::Mode::WAVES:
+            return AnimationManager::Mode::IDLE;
+
+
+        default:
+            return AnimationManager::Mode::IDLE;
+    }
+}
+
+
+// Request the next animation from AnimationManager.
+void toggleAnimation()
+{
+    // Determine the next mode.
+    const AnimationManager::Mode nextMode =
+        getNextMode(currentMode);
+
+    // Send the mode request to AnimationManager.
     if (!AnimationManager::setMode(nextMode))
     {
         Serial.println("[BUTTON] Animation mode request failed");
         return;
     }
 
+    // Update the local mode only after the request succeeds.
     currentMode = nextMode;
 
-    switch (currentMode)
-    {
-        case AnimationManager::Mode::SAND_CLOCK:
-            Serial.println("[BUTTON] Original SandClock selected");
-            break;
-
-        case AnimationManager::Mode::WATER:
-            Serial.println("[BUTTON] WaterAnimation selected");
-            break;
-
-        case AnimationManager::Mode::SAND_GRAVITY:
-            Serial.println("[BUTTON] SandGravity selected");
-            break;
-
-        default:
-            break;
-    }
+    Serial.printf(
+        "[BUTTON] Mode changed: %u\n",
+        static_cast<unsigned int>(currentMode)
+    );
 }
 
 // ------------------------------------------------------------
@@ -229,6 +250,7 @@ bool begin(AnimationManager::Mode initialMode)
     return true;
 }
 
+
 bool startTask()
 {
     if (!initialized) {
@@ -262,6 +284,7 @@ bool startTask()
 
     return true;
 }
+
 
 bool isTaskRunning()
 {
