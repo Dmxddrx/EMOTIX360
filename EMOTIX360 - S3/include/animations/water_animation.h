@@ -5,15 +5,23 @@
 
 namespace WaterAnimation {
 
-// Initialize the water simulation.
-// Call after MAX7219_Init() and MPU6050 initialization.
+// Initialize geometry, create the initial liquid distribution
+// and prepare the physics engine.
 void begin();
 
-// Reset the water distribution to its initial state.
+// Reset the simulation and place the liquid according
+// to the current gravity direction.
 void reset(uint32_t nowMs);
 
-// Update the water simulation.
-// Called periodically by AnimationManager.
+// Update MPU6050 gravity estimation and liquid physics.
+// Call periodically from AnimationManager.
 void update(uint32_t nowMs);
+
+// Check whether the water simulation is initialized.
+bool isReady();
+
+// Return the current number of occupied water cells.
+// A correctly operating simulation should always return 64.
+uint8_t getWaterCount();
 
 } // namespace WaterAnimation
