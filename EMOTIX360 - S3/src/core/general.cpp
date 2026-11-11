@@ -239,7 +239,7 @@ bool begin()
 
     // Keep this initial mode identical in both managers.
     constexpr AnimationManager::Mode INITIAL_ANIMATION_MODE =
-        AnimationManager::Mode::WATER;
+        AnimationManager::Mode::SAND_GRAVITY;
 
     // Change to Mode::SAND_CLOCK if you prefer SandClock at startup.
 

@@ -45,45 +45,78 @@ AnimationManager::Mode currentMode =
 /*
  * TOGGLE ANIMATION MODE
  *
- * Switches between:
+ * Animation sequence:
  *
- *     SAND_CLOCK <-> WATER
+ *     SAND_CLOCK
+ *          |
+ *          v
+ *       WATER
+ *          |
+ *          v
+ *     SAND_GRAVITY
+ *          |
+ *          v
+ *     SAND_CLOCK
  *
- * The AnimationManager owns the matrix.
- * This function only requests a mode change.
- *
- * If the mode request fails, currentMode is not changed.
+ * The original SandClock and both physics simulations
+ * are controlled by AnimationManager.
  */
 void toggleAnimation()
 {
     AnimationManager::Mode nextMode;
 
-    if (currentMode == AnimationManager::Mode::WATER)
+    switch (currentMode)
     {
-        nextMode = AnimationManager::Mode::SAND_CLOCK;
-    }
-    else
-    {
-        nextMode = AnimationManager::Mode::WATER;
+        case AnimationManager::Mode::SAND_CLOCK:
+        {
+            nextMode = AnimationManager::Mode::WATER;
+            break;
+        }
+
+        case AnimationManager::Mode::WATER:
+        {
+            nextMode = AnimationManager::Mode::SAND_GRAVITY;
+            break;
+        }
+
+        case AnimationManager::Mode::SAND_GRAVITY:
+        {
+            nextMode = AnimationManager::Mode::SAND_CLOCK;
+            break;
+        }
+
+        case AnimationManager::Mode::IDLE:
+        default:
+        {
+            nextMode = AnimationManager::Mode::SAND_CLOCK;
+            break;
+        }
     }
 
-    // Request the mode change from AnimationManager.
     if (!AnimationManager::setMode(nextMode))
     {
         Serial.println("[BUTTON] Animation mode request failed");
         return;
     }
 
-    // Update local mode only after a successful request.
     currentMode = nextMode;
 
-    if (currentMode == AnimationManager::Mode::WATER)
+    switch (currentMode)
     {
-        Serial.println("[BUTTON] WaterAnimation selected");
-    }
-    else
-    {
-        Serial.println("[BUTTON] SandClock selected");
+        case AnimationManager::Mode::SAND_CLOCK:
+            Serial.println("[BUTTON] Original SandClock selected");
+            break;
+
+        case AnimationManager::Mode::WATER:
+            Serial.println("[BUTTON] WaterAnimation selected");
+            break;
+
+        case AnimationManager::Mode::SAND_GRAVITY:
+            Serial.println("[BUTTON] SandGravity selected");
+            break;
+
+        default:
+            break;
     }
 }
 

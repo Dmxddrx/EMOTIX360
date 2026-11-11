@@ -4,6 +4,7 @@
 #include "max7219.h"
 #include "sand_clock.h"
 #include "water_animation.h"
+#include "sand_gravity.h"
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -43,7 +44,8 @@ void applyMode(Mode requestedMode, Mode &activeMode)
 
     // Clear the previous animation before changing modes.
     if (activeMode == Mode::SAND_CLOCK ||
-        activeMode == Mode::WATER)
+        activeMode == Mode::WATER ||
+        activeMode == Mode::SAND_GRAVITY)
     {
         MAX7219_Clear();
         MAX7219_Update();
@@ -67,6 +69,14 @@ void applyMode(Mode requestedMode, Mode &activeMode)
             WaterAnimation::begin();
 
             Serial.println("[ANIMATION] WaterAnimation activated");
+            break;
+        }
+
+        case Mode::SAND_GRAVITY:
+        {
+            SandGravity::begin();
+
+            Serial.println("[ANIMATION] SandGravity activated");
             break;
         }
 
@@ -127,6 +137,12 @@ void animationTask(void *parameter)
             case Mode::WATER:
             {
                 WaterAnimation::update(nowMs);
+                break;
+            }
+
+            case Mode::SAND_GRAVITY:
+            {
+                SandGravity::update(nowMs);
                 break;
             }
 

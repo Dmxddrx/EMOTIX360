@@ -8,8 +8,9 @@ namespace AnimationManager {
 // Available matrix animation modes.
 enum class Mode : uint8_t {
     IDLE,
-    SAND_CLOCK,
-    WATER
+    SAND_CLOCK,    // Original randomized hourglass animation
+    WATER,         // Physics-based water simulation
+    SAND_GRAVITY   // Physics-based sand particle simulation
 };
 
 // Initialize the AnimationManager.
