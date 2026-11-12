@@ -8,6 +8,7 @@
 #include "max7219.h"
 #include "animation_manager.h"
 #include "button.h"
+#include "bluetooth_manager.h"
 
 #include <Arduino.h>
 
@@ -276,6 +277,23 @@ bool begin()
         wifiTaskStarted ? "STARTED" : "UNAVAILABLE"
     );
 
+
+    // INITIALIZE BLUETOOTH MANAGER
+    const bool bluetoothInitialized =
+        BluetoothManager::begin();
+
+    bool bluetoothTaskStarted = false;
+
+    if (bluetoothInitialized)
+    {
+        bluetoothTaskStarted =
+            BluetoothManager::startTask();
+    }
+
+    Serial.printf(
+        "[GENERAL] Bluetooth Manager: %s\n",
+        bluetoothTaskStarted ? "STARTED" : "FAILED"
+    );
 
     // Start OLED task only when OLED is enabled.
     bool oledTaskStarted = false;
