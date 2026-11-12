@@ -13,7 +13,7 @@ constexpr uint8_t GRAIN_TOTAL = 64;
 
 
 // Animation timing. update() must be called frequently from general_run().
-constexpr uint32_t DROP_STEP_MS = 75;       // Time between moving-grain pixels
+constexpr uint32_t DROP_STEP_MS = 300;       // Time between moving-grain pixels
 constexpr uint32_t GRAIN_GAP_MS = 120;      // Pause after one grain settles
 constexpr uint32_t COMPLETE_HOLD_MS = 1800; // Pause before a new randomized cycle
 

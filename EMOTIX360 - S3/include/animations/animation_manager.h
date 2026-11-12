@@ -8,9 +8,13 @@ namespace AnimationManager {
 // Available matrix animation modes.
 enum class Mode : uint8_t {
     IDLE,
+
+    STARTUP,
+
     SAND_CLOCK,
     WATER,
     SAND_GRAVITY,
+
     HEART,
     RAIN,
     WAVES

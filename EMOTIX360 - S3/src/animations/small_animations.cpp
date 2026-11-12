@@ -1,4 +1,3 @@
-
 #include "small_animations.h"
 
 #include "water_geometry.h"
@@ -22,13 +21,6 @@ constexpr uint8_t MATRIX_MODULE_SIZE = 8;
 
 constexpr uint16_t NODE_COUNT =
     WaterGeometry::NODE_COUNT;
-
-// ------------------------------------------------------------
-// AUTOMATIC EFFECT SEQUENCE
-// ------------------------------------------------------------
-
-constexpr uint32_t STARTUP_STEP_MS = 22;
-constexpr uint32_t STARTUP_HOLD_MS = 700;
 
 // ------------------------------------------------------------
 // HEART ANIMATION
@@ -90,6 +82,18 @@ struct BorderNode
     float angle;
 };
 
+// Used to build a centre-outward startup fill sequence.
+struct FillNode
+{
+    uint8_t nodeID;
+
+    // Distance from the physical centre line of the assembly.
+    float centerDistance;
+
+    // Secondary ordering for LEDs at similar centre distances.
+    float sideDistance;
+};
+
 struct RainDrop
 {
     uint8_t nodeID;
@@ -130,13 +134,65 @@ float geometryHalfWidth = 1.0f;
 float geometryHalfHeight = 1.0f;
 
 // ------------------------------------------------------------
-// STARTUP BORDER
+// STARTUP ANIMATION
+// ------------------------------------------------------------
+
+constexpr uint32_t STARTUP_STEP_MS = 22;
+
+// Pause after the perimeter has been completed.
+constexpr uint32_t STARTUP_HOLD_MS = 600;
+
+// Centre-outward interior fill speed.
+constexpr uint32_t STARTUP_FILL_STEP_MS = 30;
+
+// Full-display breathing pulse.
+constexpr uint32_t STARTUP_PULSE_PERIOD_MS = 1500;
+constexpr uint32_t STARTUP_PULSE_DURATION_MS = 4500;
+
+constexpr float STARTUP_PULSE_MIN_FACTOR = 0.30f;
+
+// ------------------------------------------------------------
+// STARTUP -> HEART TRANSITION
+// ------------------------------------------------------------
+
+// Time taken to transform the full display into two heart icons.
+constexpr uint32_t STARTUP_TRANSITION_DURATION_MS = 1800;
+
+// Final brightness curve must match updateHeart().
+constexpr float HEART_PULSE_MIN_FACTOR = 0.55f;
+
+// Smooth transition state.
+uint8_t startupHeartMask[NODE_COUNT] = {};
+uint8_t startupTransitionOffOrder[NODE_COUNT] = {};
+
+uint16_t startupTransitionOffCount = 0;
+uint16_t lastTransitionOffShown = UINT16_MAX;
+
+bool startupHandoffPending = false;
+
+// ------------------------------------------------------------
+// STARTUP ANIMATION STATE
 // ------------------------------------------------------------
 
 BorderNode borderOrder[NODE_COUNT] = {};
 
-uint8_t borderCount = 0;
-uint8_t lastBorderShown = 0;
+uint16_t borderCount = 0;
+uint16_t lastBorderShown = 0xFFFFU;
+
+// Interior LEDs, sorted from the hourglass neck outward.
+FillNode startupFillOrder[NODE_COUNT] = {};
+
+uint16_t startupFillCount = 0;
+uint16_t lastFillShown = 0xFFFFU;
+
+// Startup completion status.
+bool startupComplete = false;
+
+// Preserve the user's normal MAX7219 brightness.
+uint8_t startupBaseBrightness = 5;
+
+uint8_t lastStartupBrightness = 0xFFU;
+bool startupBrightnessCaptured = false;
 
 // ------------------------------------------------------------
 // GRAVITY STATE
@@ -183,10 +239,10 @@ float wavePhase = 0.0f;
 // FUNCTION FORWARD DECLARATIONS
 // ============================================================
 
-// Effect transition function is defined after the effect
-// rendering functions to ensure all referenced functions
-// are declared before use.
 void setEffectInternal(Effect effect, uint32_t nowMs);
+
+// Startup-to-heart transition is defined after updateStartup().
+void updateStartupHeartTransition(uint32_t transitionElapsedMs);
 
 // ============================================================
 // GENERAL HELPERS
@@ -429,46 +485,705 @@ bool buildBorderOrder()
 }
 
 /*
- * UPDATE STARTUP BORDER
+ * BUILD STARTUP FILL ORDER
  *
- * Illuminate physical perimeter LEDs one at a time.
+ * The border is illuminated first.
  *
- * After the complete border is illuminated, hold it briefly
- * before automatically starting the heart animation.
+ * Then illuminate the interior LEDs beginning near the
+ * physical centre line and progressing toward both ends.
+ *
+ * Physical coordinates come from WaterGeometry, so this
+ * pattern follows the assembled hourglass geometry rather
+ * than assuming an ordinary rectangular 16x8 display.
+ */
+bool buildStartupFillOrder()
+{
+    startupFillCount = 0;
+
+    for (uint16_t id = 0; id < NODE_COUNT; ++id)
+    {
+        uint8_t x;
+        uint8_t y;
+
+        if (!WaterGeometry::getCoordinates(
+                (uint8_t)id,
+                x,
+                y))
+        {
+            return false;
+        }
+
+        const uint8_t localX =
+            (uint8_t)(x % MATRIX_MODULE_SIZE);
+
+        const bool isBorder =
+            localX == 0 ||
+            localX == MATRIX_MODULE_SIZE - 1 ||
+            y == 0 ||
+            y == MATRIX_MODULE_SIZE - 1;
+
+        // The border is handled by buildBorderOrder().
+        if (isBorder) {
+            continue;
+        }
+
+        if (startupFillCount >= NODE_COUNT) {
+            return false;
+        }
+
+        const WaterGeometry::Node *node =
+            getPhysicalNode((uint8_t)id);
+
+        if (node == nullptr) {
+            return false;
+        }
+
+        FillNode &entry =
+            startupFillOrder[startupFillCount];
+
+        entry.nodeID = (uint8_t)id;
+
+        // First priority: approach the centre line.
+        entry.centerDistance =
+            fabsf(node->y - geometryCenterY);
+
+        // Second priority: approach the horizontal centre.
+        entry.sideDistance =
+            fabsf(node->x - geometryCenterX);
+
+        ++startupFillCount;
+    }
+
+    // Sort from the centre line outward.
+    // Insertion sort is sufficient for 128 or fewer nodes.
+    for (uint16_t i = 1; i < startupFillCount; ++i)
+    {
+        const FillNode key = startupFillOrder[i];
+
+        int16_t j = (int16_t)i - 1;
+
+        while (j >= 0)
+        {
+            const FillNode &previous =
+                startupFillOrder[j];
+
+            const bool sameCentreDistance =
+                fabsf(
+                    previous.centerDistance -
+                    key.centerDistance
+                ) < 0.0001f;
+
+            const bool shouldMove =
+                previous.centerDistance > key.centerDistance ||
+                (
+                    sameCentreDistance &&
+                    previous.sideDistance > key.sideDistance
+                );
+
+            if (!shouldMove) {
+                break;
+            }
+
+            startupFillOrder[j + 1] =
+                startupFillOrder[j];
+
+            --j;
+        }
+
+        startupFillOrder[j + 1] = key;
+    }
+
+    return startupFillCount > 0;
+}
+
+/*
+ * BUILD STARTUP -> HEART TRANSITION ORDER
+ *
+ * Create a mask containing the exact pixels used by the
+ * double-heart icon.
+ *
+ * Then create an order for turning off every other LED.
+ *
+ * Removal order:
+ *     1. Interior pixels, in reverse startup-fill order.
+ *     2. Border pixels, in reverse border-sweep order.
+ *
+ * Heart pixels are never included in the removal order.
+ *
+ * This allows the full display to gradually become the
+ * two original 8x8 heart icons without changing their shape.
+ */
+bool buildStartupTransitionOrder()
+{
+    if (Icon_Heart.data == nullptr ||
+        Icon_Heart.width != 8 ||
+        Icon_Heart.height != 8)
+    {
+        Serial.println(
+            "[SMALL ANIMATIONS] Invalid heart icon for transition"
+        );
+
+        return false;
+    }
+
+    memset(startupHeartMask, 0, sizeof(startupHeartMask));
+
+    startupTransitionOffCount = 0;
+
+    bool alreadyAdded[NODE_COUNT] = {};
+
+    uint16_t heartPixelCount = 0;
+
+    // --------------------------------------------------------
+    // BUILD THE DOUBLE-HEART MASK
+    // --------------------------------------------------------
+
+    for (uint16_t id = 0; id < NODE_COUNT; ++id)
+    {
+        uint8_t x;
+        uint8_t y;
+
+        if (!WaterGeometry::getCoordinates(
+                (uint8_t)id,
+                x,
+                y))
+        {
+            return false;
+        }
+
+        // Both physical modules use the same 8x8 icon.
+        const uint8_t localX =
+            (uint8_t)(x % MATRIX_MODULE_SIZE);
+
+        const uint8_t row =
+            Icon_Heart.data[y];
+
+        const bool isHeartPixel =
+            (row & (uint8_t)(0x80U >> localX)) != 0;
+
+        if (isHeartPixel)
+        {
+            startupHeartMask[id] = 1;
+            ++heartPixelCount;
+        }
+    }
+
+    // --------------------------------------------------------
+    // ADD INTERIOR BACKGROUND PIXELS
+    // --------------------------------------------------------
+
+    // Reverse the original centre-outward fill sequence.
+    for (int16_t i = (int16_t)startupFillCount - 1;
+         i >= 0;
+         --i)
+    {
+        const uint8_t id =
+            startupFillOrder[i].nodeID;
+
+        // Never remove a heart pixel.
+        if (startupHeartMask[id]) {
+            continue;
+        }
+
+        if (alreadyAdded[id]) {
+            continue;
+        }
+
+        if (startupTransitionOffCount >= NODE_COUNT) {
+            return false;
+        }
+
+        startupTransitionOffOrder[
+            startupTransitionOffCount++
+        ] = id;
+
+        alreadyAdded[id] = true;
+    }
+
+    // --------------------------------------------------------
+    // ADD BORDER BACKGROUND PIXELS
+    // --------------------------------------------------------
+
+    // Reverse the original perimeter sweep sequence.
+    for (int16_t i = (int16_t)borderCount - 1;
+         i >= 0;
+         --i)
+    {
+        const uint8_t id =
+            borderOrder[i].nodeID;
+
+        // Some heart pixels also belong to the module border.
+        if (startupHeartMask[id]) {
+            continue;
+        }
+
+        if (alreadyAdded[id]) {
+            continue;
+        }
+
+        if (startupTransitionOffCount >= NODE_COUNT) {
+            return false;
+        }
+
+        startupTransitionOffOrder[
+            startupTransitionOffCount++
+        ] = id;
+
+        alreadyAdded[id] = true;
+    }
+
+    // --------------------------------------------------------
+    // SAFETY CHECK
+    // --------------------------------------------------------
+
+    // Include any remaining background pixels in case the
+    // border or fill order does not cover a particular node.
+    for (uint16_t id = 0; id < NODE_COUNT; ++id)
+    {
+        if (startupHeartMask[id] || alreadyAdded[id]) {
+            continue;
+        }
+
+        if (startupTransitionOffCount >= NODE_COUNT) {
+            return false;
+        }
+
+        startupTransitionOffOrder[
+            startupTransitionOffCount++
+        ] = (uint8_t)id;
+
+        alreadyAdded[id] = true;
+    }
+
+    // The icon contains 32 pixels per module, 64 in total.
+    // All remaining LEDs must be included in the removal list.
+    if (heartPixelCount != 64 ||
+        startupTransitionOffCount !=
+            (NODE_COUNT - heartPixelCount))
+    {
+        Serial.println(
+            "[SMALL ANIMATIONS] Heart transition order validation failed"
+        );
+
+        return false;
+    }
+
+    Serial.printf(
+        "[SMALL ANIMATIONS] Heart transition ready: "
+        "%u heart pixels, %u background pixels\n",
+        heartPixelCount,
+        startupTransitionOffCount
+    );
+
+    return true;
+}
+
+/*
+ * UPDATE STARTUP ANIMATION
+ *
+ * STAGE 1:
+ *     Illuminate the physical perimeter LEDs one at a time.
+ *
+ * STAGE 2:
+ *     Hold the completed perimeter briefly.
+ *
+ * STAGE 3:
+ *     Fill the interior from the hourglass centre outward.
+ *
+*
+ * STAGE 4:
+ *     Pulse the fully illuminated display three times.
+ *
+ * STAGE 5:
+ *     Gradually remove background pixels and transition
+ *     into the double-heart animation.
+ *
+ * When all stages finish, set startupComplete.
+ *
+ * AnimationManager handles the transition to HEART.
  */
 void updateStartup(uint32_t nowMs)
 {
+    if (startupComplete) {
+        return;
+    }
+
     const uint32_t elapsedMs =
         (uint32_t)(nowMs - effectStartedMs);
 
-    uint16_t requestedCount =
-        (uint16_t)(elapsedMs / STARTUP_STEP_MS);
-
-    if (requestedCount > borderCount) {
-        requestedCount = borderCount;
-    }
-
-    if (requestedCount != lastBorderShown)
-    {
-        bool frame[NODE_COUNT] = {};
-
-        for (uint16_t i = 0; i < requestedCount; ++i)
-        {
-            frame[borderOrder[i].nodeID] = true;
-        }
-
-        renderNodeFrame(frame);
-
-        lastBorderShown =
-            (uint8_t)requestedCount;
-    }
+    // --------------------------------------------------------
+    // CALCULATE STARTUP STAGE DURATIONS
+    // --------------------------------------------------------
 
     const uint32_t borderDuration =
         (uint32_t)borderCount * STARTUP_STEP_MS;
 
-    if (elapsedMs >= borderDuration + STARTUP_HOLD_MS)
+    const uint32_t fillStartTime =
+        borderDuration + STARTUP_HOLD_MS;
+
+    const uint32_t fillDuration =
+        (uint32_t)startupFillCount * STARTUP_FILL_STEP_MS;
+
+    const uint32_t pulseStartTime =
+        fillStartTime + fillDuration;
+
+
+    // --------------------------------------------------------
+    // STAGE 1: BORDER SWEEP
+    // --------------------------------------------------------
+
+    uint16_t requestedBorder =
+        (uint16_t)(elapsedMs / STARTUP_STEP_MS);
+
+    if (requestedBorder > borderCount) {
+        requestedBorder = borderCount;
+    }
+
+
+    // --------------------------------------------------------
+    // STAGE 2 / 3: INTERIOR FILL
+    // --------------------------------------------------------
+
+    uint16_t requestedFill = 0;
+
+    if (elapsedMs >= fillStartTime)
     {
-        setEffectInternal(Effect::HEART, nowMs);
+        requestedFill =
+            (uint16_t)(
+                (elapsedMs - fillStartTime) /
+                STARTUP_FILL_STEP_MS
+            );
+
+        if (requestedFill > startupFillCount) {
+            requestedFill = startupFillCount;
+        }
+    }
+
+
+    // --------------------------------------------------------
+    // RENDER ONLY WHEN THE PATTERN CHANGES
+    // --------------------------------------------------------
+
+    if (requestedBorder != lastBorderShown ||
+        requestedFill != lastFillShown)
+    {
+        bool frame[NODE_COUNT] = {};
+
+        // Draw completed border LEDs.
+        for (uint16_t i = 0; i < requestedBorder; ++i)
+        {
+            frame[borderOrder[i].nodeID] = true;
+        }
+
+        // Draw completed interior-fill LEDs.
+        for (uint16_t i = 0; i < requestedFill; ++i)
+        {
+            frame[startupFillOrder[i].nodeID] = true;
+        }
+
+        renderNodeFrame(frame);
+
+        lastBorderShown = requestedBorder;
+        lastFillShown = requestedFill;
+    }
+
+
+    // --------------------------------------------------------
+    // STAGE 4: FULL-DISPLAY BREATHING PULSE
+    // --------------------------------------------------------
+
+    if (elapsedMs < pulseStartTime) {
+        return;
+    }
+
+    const uint32_t pulseElapsedMs =
+        elapsedMs - pulseStartTime;
+
+
+    // --------------------------------------------------------
+    // STAGE 4A: NORMAL STARTUP BREATHING
+    // --------------------------------------------------------
+
+    if (pulseElapsedMs < STARTUP_PULSE_DURATION_MS)
+    {
+        const float phase =
+            2.0f * 3.14159265358979323846f *
+            (
+                (float)(pulseElapsedMs % STARTUP_PULSE_PERIOD_MS) /
+                (float)STARTUP_PULSE_PERIOD_MS
+            );
+
+        const float pulse =
+            0.5f - (0.5f * cosf(phase));
+
+        const float brightnessFactor =
+            STARTUP_PULSE_MIN_FACTOR +
+            (
+                (1.0f - STARTUP_PULSE_MIN_FACTOR) *
+                pulse
+            );
+
+        uint8_t brightness =
+            (uint8_t)lroundf(
+                startupBaseBrightness * brightnessFactor
+            );
+
+        // Preserve the original OFF state.
+        if (startupBaseBrightness > 0 && brightness == 0) {
+            brightness = 1;
+        }
+
+        if (brightness != lastStartupBrightness)
+        {
+            MAX7219_SetBrightness(brightness);
+            lastStartupBrightness = brightness;
+        }
+
+        return;
+    }
+
+
+    // --------------------------------------------------------
+    // STAGE 5: SMOOTH TRANSITION FROM FULL DISPLAY TO HEART
+    // --------------------------------------------------------
+
+    const uint32_t transitionElapsedMs =
+        pulseElapsedMs - STARTUP_PULSE_DURATION_MS;
+
+    updateStartupHeartTransition(transitionElapsedMs);
+    
+}
+
+/*
+ * UPDATE STARTUP -> HEART TRANSITION
+ *
+ * STAGE 5:
+ *
+ * Gradually transform the fully illuminated display into
+ * the double-heart pattern.
+ *
+ * PIXEL TRANSITION:
+ *     - Heart pixels remain illuminated.
+ *     - Background pixels are turned off progressively.
+ *     - The original heart bitmap is never modified.
+ *
+ * BRIGHTNESS TRANSITION:
+ *     - Starts with the startup breathing brightness.
+ *     - The minimum brightness changes from 30% to 55%.
+ *     - The pulse period changes from 1500ms to 900ms.
+ *     - The final brightness matches updateHeart() at phase zero.
+ *
+ * Smoothstep interpolation prevents a sudden change in the
+ * pulse speed or brightness at either end of this transition.
+ */
+void updateStartupHeartTransition(uint32_t transitionElapsedMs)
+{
+    // --------------------------------------------------------
+    // CALCULATE TRANSITION PROGRESS
+    // --------------------------------------------------------
+
+    float progress =
+        (float)transitionElapsedMs /
+        (float)STARTUP_TRANSITION_DURATION_MS;
+
+    if (progress > 1.0f) {
+        progress = 1.0f;
+    }
+
+    // Smoothstep: 0 -> 1 with zero slope at both ends.
+    const float easedProgress =
+        progress * progress *
+        (3.0f - (2.0f * progress));
+
+
+    // --------------------------------------------------------
+    // STAGE 5A: REMOVE BACKGROUND PIXELS
+    // --------------------------------------------------------
+
+    uint16_t requestedOff =
+        (uint16_t)(
+            (float)startupTransitionOffCount *
+            easedProgress
+        );
+
+    if (requestedOff > startupTransitionOffCount) {
+        requestedOff = startupTransitionOffCount;
+    }
+
+    // Render only when the number of removed pixels changes.
+    if (requestedOff != lastTransitionOffShown)
+    {
+        bool frame[NODE_COUNT] = {};
+
+        // Keep every heart pixel illuminated.
+        for (uint16_t id = 0; id < NODE_COUNT; ++id)
+        {
+            if (startupHeartMask[id]) {
+                frame[id] = true;
+            }
+        }
+
+        // Keep the background pixels that have not yet been
+        // removed.
+        for (uint16_t i = requestedOff;
+             i < startupTransitionOffCount;
+             ++i)
+        {
+            const uint8_t id =
+                startupTransitionOffOrder[i];
+
+            frame[id] = true;
+        }
+
+        renderNodeFrame(frame);
+
+        lastTransitionOffShown = requestedOff;
+    }
+
+
+    // --------------------------------------------------------
+    // STAGE 5B: GRADUALLY CHANGE THE PULSE SPEED
+    // --------------------------------------------------------
+
+    /*
+     * Blend the startup and heart pulse phases.
+     *
+     * At the beginning:
+     *     Startup period = 1500ms.
+     *
+     * At the end:
+     *     Heart period = 900ms.
+     *
+     * The transition lasts 1800ms, which is exactly two
+     * final heart-pulse periods.
+     *
+     * Therefore, the transition finishes at the minimum
+     * brightness of the heart pulse.
+     */
+
+    const float startupPhase =
+        2.0f * 3.14159265358979323846f *
+        (
+            (float)transitionElapsedMs /
+            (float)STARTUP_PULSE_PERIOD_MS
+        );
+
+    const float heartPhase =
+        2.0f * 3.14159265358979323846f *
+        (
+            (float)transitionElapsedMs /
+            HEART_PULSE_PERIOD_MS
+        );
+
+    // Smoothly blend the two pulse phases.
+    const float phase =
+        startupPhase +
+        (
+            (heartPhase - startupPhase) *
+            easedProgress
+        );
+
+    const float pulse =
+        0.5f - (0.5f * cosf(phase));
+
+
+    // --------------------------------------------------------
+    // STAGE 5C: BLEND THE BRIGHTNESS CURVE
+    // --------------------------------------------------------
+
+    // Gradually change the minimum brightness from startup
+    // breathing brightness to the heart animation brightness.
+    const float minimumFactor =
+        STARTUP_PULSE_MIN_FACTOR +
+        (
+            (HEART_PULSE_MIN_FACTOR -
+             STARTUP_PULSE_MIN_FACTOR) *
+            easedProgress
+        );
+
+    // Gradually change the brightness reference as well.
+    const float baseBrightness =
+        (float)startupBaseBrightness +
+        (
+            ((float)heartBaseBrightness -
+             (float)startupBaseBrightness) *
+            easedProgress
+        );
+
+    const float brightnessFactor =
+        minimumFactor +
+        (
+            (1.0f - minimumFactor) *
+            pulse
+        );
+
+    uint8_t brightness =
+        (uint8_t)lroundf(
+            baseBrightness * brightnessFactor
+        );
+
+    // MAX7219 intensity range is 0..15.
+    if (brightness > 15) {
+        brightness = 15;
+    }
+
+    // Preserve the OFF state if the interpolated base is zero.
+    if (baseBrightness > 0.0f && brightness == 0) {
+        brightness = 1;
+    }
+
+    if (brightness != lastStartupBrightness)
+    {
+        MAX7219_SetBrightness(brightness);
+        lastStartupBrightness = brightness;
+    }
+
+
+    // --------------------------------------------------------
+    // STARTUP -> HEART HANDOFF
+    // --------------------------------------------------------
+
+    if (transitionElapsedMs >= STARTUP_TRANSITION_DURATION_MS)
+    {
+        // Make sure the final pattern contains only the hearts.
+        if (lastTransitionOffShown != startupTransitionOffCount)
+        {
+            bool frame[NODE_COUNT] = {};
+
+            for (uint16_t id = 0; id < NODE_COUNT; ++id)
+            {
+                if (startupHeartMask[id]) {
+                    frame[id] = true;
+                }
+            }
+
+            renderNodeFrame(frame);
+
+            lastTransitionOffShown =
+                startupTransitionOffCount;
+        }
+
+        // Explicitly set the exact HEART starting brightness.
+        const uint8_t heartStartingBrightness =
+            (uint8_t)lroundf(
+                (float)heartBaseBrightness *
+                HEART_PULSE_MIN_FACTOR
+            );
+
+        MAX7219_SetBrightness(heartStartingBrightness);
+
+        lastStartupBrightness =
+            heartStartingBrightness;
+
+        // Tell setEffectInternal() to preserve this brightness
+        // when AnimationManager switches STARTUP to HEART.
+        startupHandoffPending = true;
+
+        startupComplete = true;
+
+        Serial.println(
+            "[SMALL ANIMATIONS] Smooth HEART transition completed"
+        );
     }
 }
 
@@ -1176,50 +1891,159 @@ void updateWaves(uint32_t nowMs)
 /*
  * SET EFFECT INTERNAL
  *
- * There is exactly ONE definition of this function.
- *
  * Changes the active small animation and resets
  * its individual state.
+ *
+ * SPECIAL STARTUP -> HEART HANDOFF:
+ *
+ * When startup finishes its background-removal transition:
+ *     - Keep the existing heart framebuffer.
+ *     - Preserve the final transition brightness.
+ *     - Do not redraw or restart the heart visually.
+ *
+ * For all other transitions, initialize the selected
+ * effect normally.
  *
  * The caller must already have initialized WaterGeometry.
  */
 void setEffectInternal(Effect effect, uint32_t nowMs)
 {
-    // Restore normal matrix brightness when leaving HEART.
-    if (currentEffect == Effect::HEART &&
+    const Effect previousEffect = currentEffect;
+
+    // --------------------------------------------------------
+    // CHECK FOR THE SPECIAL STARTUP -> HEART HANDOFF
+    // --------------------------------------------------------
+
+    // This must be checked before changing startupComplete
+    // or startupHandoffPending.
+    const bool smoothStartupHandoff =
+        previousEffect == Effect::STARTUP &&
+        effect == Effect::HEART &&
+        startupComplete &&
+        startupHandoffPending;
+
+
+    // --------------------------------------------------------
+    // RESTORE THE PREVIOUS EFFECT'S NORMAL BRIGHTNESS
+    // --------------------------------------------------------
+
+    if (previousEffect == Effect::HEART &&
         effect != Effect::HEART)
     {
         MAX7219_SetBrightness(heartBaseBrightness);
     }
-
-    // Capture the normal brightness only when entering HEART.
-    // This prevents repeated calls from reducing the
-    // brightness baseline during an existing heartbeat.
-    if (effect == Effect::HEART &&
-        currentEffect != Effect::HEART)
+    else if (previousEffect == Effect::STARTUP &&
+             effect != Effect::STARTUP &&
+             !smoothStartupHandoff &&
+             startupBrightnessCaptured)
     {
-        heartBaseBrightness = MAX7219_GetBrightness();
+        // Ordinary interruption of startup.
+        //
+        // Do not restore brightness during the smooth
+        // STARTUP -> HEART handoff.
+        MAX7219_SetBrightness(startupBaseBrightness);
     }
+
+
+    // --------------------------------------------------------
+    // HANDLE STARTUP BRIGHTNESS CAPTURE
+    // --------------------------------------------------------
+
+    if (effect == Effect::STARTUP)
+    {
+        // Restarting an existing startup animation.
+        // Restore its original brightness before capturing it.
+        if (previousEffect == Effect::STARTUP &&
+            startupBrightnessCaptured)
+        {
+            MAX7219_SetBrightness(startupBaseBrightness);
+        }
+
+        // Capture the normal matrix brightness.
+        startupBaseBrightness = MAX7219_GetBrightness();
+
+        startupBrightnessCaptured = true;
+
+        startupComplete = false;
+        startupHandoffPending = false;
+
+        lastStartupBrightness = 0xFFU;
+        lastTransitionOffShown = 0xFFFFU;
+    }
+    else if (previousEffect == Effect::STARTUP)
+    {
+        // Startup has now handed control to another effect.
+        // Its original brightness no longer needs to be restored
+        // by end() or a later effect transition.
+        startupBrightnessCaptured = false;
+
+        startupComplete = false;
+    }
+
+
+    // --------------------------------------------------------
+    // UPDATE ACTIVE EFFECT STATE
+    // --------------------------------------------------------
 
     currentEffect = effect;
 
     effectStartedMs = nowMs;
     lastEffectRenderMs = 0;
 
+
+    // --------------------------------------------------------
+    // INITIALIZE THE SELECTED EFFECT
+    // --------------------------------------------------------
+
     switch (effect)
     {
         case Effect::STARTUP:
         {
-            lastBorderShown = 0;
+            lastBorderShown = 0xFFFFU;
+            lastFillShown = 0xFFFFU;
+
+            startupComplete = false;
+            startupHandoffPending = false;
+
             break;
         }
 
+
         case Effect::HEART:
         {
-            // Draw both complete 8x8 hearts.
-            renderHeart();
+            if (!smoothStartupHandoff)
+            {
+                // Normal entry into HEART.
+                renderHeart();
+
+                // Start at the minimum heartbeat brightness.
+                const uint8_t startingBrightness =
+                    (uint8_t)lroundf(
+                        heartBaseBrightness *
+                        HEART_PULSE_MIN_FACTOR
+                    );
+
+                MAX7219_SetBrightness(startingBrightness);
+            }
+
+            /*
+             * During a smooth startup handoff:
+             *
+             * Do not call renderHeart().
+             *
+             * The final transition frame already contains
+             * exactly the two heart icons.
+             *
+             * The brightness is also already at the correct
+             * starting point for updateHeart().
+             */
+
+            startupHandoffPending = false;
+            startupComplete = false;
+
             break;
         }
+
 
         case Effect::RAIN:
         {
@@ -1228,20 +2052,29 @@ void setEffectInternal(Effect effect, uint32_t nowMs)
 
             lastRainSpawnMs = nowMs;
             lastRainUpdateMs = nowMs;
+
+            startupHandoffPending = false;
+
             break;
         }
+
 
         case Effect::WAVES:
         {
             wavePhase = 0.0f;
+
+            startupHandoffPending = false;
+
             break;
         }
+
 
         default:
         {
             break;
         }
     }
+
 
     Serial.printf(
         "[SMALL ANIMATIONS] Effect: %u\n",
@@ -1257,7 +2090,14 @@ void resetAnimationState()
 {
     memset(rainDrops, 0, sizeof(rainDrops));
 
-    lastBorderShown = 0;
+    startupHandoffPending = false;
+    lastTransitionOffShown = 0xFFFFU;
+
+    lastBorderShown = 0xFFFFU;
+    lastFillShown = 0xFFFFU;
+
+    startupComplete = false;
+    lastStartupBrightness = 0xFFU;
 
     lastRainSpawnMs = 0;
     lastRainUpdateMs = 0;
@@ -1311,6 +2151,25 @@ bool begin()
         return false;
     }
 
+    // Build the centre-outward interior fill sequence.
+    if (!buildStartupFillOrder())
+    {
+        Serial.println(
+            "[SMALL ANIMATIONS] Interior fill generation failed"
+        );
+
+        return false;
+    }
+
+    if (!buildStartupTransitionOrder()) {
+
+        Serial.println(
+            "[SMALL ANIMATIONS] Interior transition generation failed"
+        );
+
+        return false;
+    }
+
     resetAnimationState();
 
     // Begin with the startup border animation.
@@ -1319,9 +2178,11 @@ bool begin()
     setEffectInternal(Effect::STARTUP, millis());
 
     Serial.printf(
-        "[SMALL ANIMATIONS] Geometry ready: %u nodes, %u border LEDs\n",
+        "[SMALL ANIMATIONS] Geometry ready: %u nodes, "
+        "%u border LEDs, %u interior LEDs\n",
         (unsigned int)NODE_COUNT,
-        borderCount
+        (unsigned int)borderCount,
+        (unsigned int)startupFillCount
     );
 
     return true;
@@ -1463,16 +2324,23 @@ void update(uint32_t nowMs)
 
 void end()
 {
-    // Restore normal matrix brightness if HEART was active.
+    // Restore normal brightness if HEART was active.
     if (currentEffect == Effect::HEART)
     {
         MAX7219_SetBrightness(heartBaseBrightness);
     }
+    // Also restore normal brightness if STARTUP was interrupted.
+    else if (currentEffect == Effect::STARTUP &&
+             startupBrightnessCaptured)
+    {
+        MAX7219_SetBrightness(startupBaseBrightness);
+    }
+
+    startupBrightnessCaptured = false;
 
     initialized = false;
 
     resetAnimationState();
-
     currentEffect = Effect::STARTUP;
 
     // MAX7219 is controlled by AnimationManager.
@@ -1486,6 +2354,11 @@ void end()
 bool isReady()
 {
     return initialized && WaterGeometry::isReady();
+}
+
+bool isStartupComplete()
+{
+    return initialized && startupComplete;
 }
 
 } // namespace SmallAnimations

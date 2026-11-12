@@ -42,6 +42,7 @@ bool initialized = false;
 bool isSmallAnimationMode(Mode mode)
 {
     switch (mode) {
+        case Mode::STARTUP:
         case Mode::HEART:
         case Mode::RAIN:
         case Mode::WAVES:
@@ -58,6 +59,9 @@ bool isSmallAnimationMode(Mode mode)
 SmallAnimations::Effect getSmallAnimationEffect(Mode mode)
 {
     switch (mode) {
+        case Mode::STARTUP:
+            return SmallAnimations::Effect::STARTUP;
+
         case Mode::HEART:
             return SmallAnimations::Effect::HEART;
 
@@ -68,7 +72,7 @@ SmallAnimations::Effect getSmallAnimationEffect(Mode mode)
             return SmallAnimations::Effect::WAVES;
 
         default:
-            return SmallAnimations::Effect::STARTUP;
+            return SmallAnimations::Effect::HEART;
     }
 }
 
@@ -82,26 +86,25 @@ SmallAnimations::Effect getSmallAnimationEffect(Mode mode)
  * The activeMode parameter is passed by reference because
  * it belongs to the AnimationManager task.
  *
- * SmallAnimations contains four selectable effects:
+ * SmallAnimations contains four effects:
  *
  *     STARTUP
  *     HEART
  *     RAIN
  *     WAVES
  *
- * These effects share the same SmallAnimations module.
+ * SPECIAL CASE:
+ *
+ *     STARTUP -> HEART
+ *
+ *     Preserve the final startup transition frame because
+ *     it already contains the two completed heart icons.
+ *
+ *     SmallAnimations handles the brightness handoff.
  */
 void applyMode(Mode newMode, Mode &activeMode)
 {
     if (newMode == activeMode) {
-
-        // Ensure the initial IDLE mode clears the
-        // matrix, even if IDLE was already active.
-        if (newMode == Mode::IDLE) {
-            MAX7219_Clear();
-            MAX7219_Update();
-        }
-
         return;
     }
 
@@ -111,53 +114,85 @@ void applyMode(Mode newMode, Mode &activeMode)
     const bool isNewSmallAnimation =
         isSmallAnimationMode(newMode);
 
-    // Stop SmallAnimations only when leaving its three effects.
+    // --------------------------------------------------------
+    // CHECK FOR THE SMOOTH STARTUP -> HEART HANDOFF
+    // --------------------------------------------------------
+
+    const bool preserveStartupHeartFrame =
+        activeMode == Mode::STARTUP &&
+        newMode == Mode::HEART;
+
+
+    // --------------------------------------------------------
+    // STOP SMALL ANIMATIONS WHEN LEAVING THEIR MODULE
+    // --------------------------------------------------------
+
     if (wasSmallAnimation && !isNewSmallAnimation) {
         SmallAnimations::end();
     }
 
-    // Clear the previous animation frame.
-    MAX7219_Clear();
-    MAX7219_Update();
 
-    switch (newMode) {
+    // --------------------------------------------------------
+    // CLEAR PREVIOUS FRAME
+    // --------------------------------------------------------
 
+    /*
+     * Do not clear the matrix during STARTUP -> HEART.
+     *
+     * The startup transition has already created the exact
+     * double-heart framebuffer.
+     *
+     * Clearing it here would destroy that framebuffer.
+     *
+     * SmallAnimations::setEffect(HEART) intentionally skips
+     * renderHeart() during this special handoff.
+     */
+
+    if (!preserveStartupHeartFrame)
+    {
+        MAX7219_Clear();
+        MAX7219_Update();
+    }
+
+
+    // --------------------------------------------------------
+    // INITIALIZE THE REQUESTED MODE
+    // --------------------------------------------------------
+
+    switch (newMode)
+    {
         case Mode::IDLE:
+        {
             break;
+        }
 
-        case Mode::SAND_CLOCK:
-            SandClock::begin();
-            break;
 
-        case Mode::WATER:
-            WaterAnimation::begin();
-            break;
-
-        case Mode::SAND_GRAVITY:
-            SandGravity::begin();
-            break;
-
+        case Mode::STARTUP:
         case Mode::HEART:
         case Mode::RAIN:
         case Mode::WAVES:
-
-            // Initialize the shared module only once
-            // when entering from a different module.
-            if (!wasSmallAnimation) {
-                if (!SmallAnimations::begin()) {
+        {
+            // Initialize SmallAnimations only when entering
+            // its module from another animation module.
+            if (!wasSmallAnimation)
+            {
+                if (!SmallAnimations::begin())
+                {
                     Serial.println(
                         "[ANIMATION] SmallAnimations initialization failed"
                     );
+
                     activeMode = Mode::IDLE;
                     return;
                 }
             }
 
+            // Select the requested effect.
             if (!SmallAnimations::setEffect(
-                    getSmallAnimationEffect(newMode))) {
-
+                    getSmallAnimationEffect(newMode)))
+            {
                 Serial.println(
-                    "[ANIMATION] Failed to select small animation"
+                    "[ANIMATION] Failed to select SmallAnimations effect"
                 );
 
                 if (!wasSmallAnimation) {
@@ -169,9 +204,36 @@ void applyMode(Mode newMode, Mode &activeMode)
             }
 
             break;
+        }
+
+
+        case Mode::SAND_CLOCK:
+        {
+            SandClock::begin();
+            break;
+        }
+
+
+        case Mode::WATER:
+        {
+            WaterAnimation::begin();
+            break;
+        }
+
+
+        case Mode::SAND_GRAVITY:
+        {
+            SandGravity::begin();
+            break;
+        }
     }
 
     activeMode = newMode;
+
+    Serial.printf(
+        "[ANIMATION] Active mode: %u\n",
+        (unsigned int)newMode
+    );
 }
 
 // ------------------------------------------------------------
@@ -232,6 +294,23 @@ void animationTask(void *parameter)
                 SandGravity::update(nowMs);
                 break;
 
+            case Mode::STARTUP:
+
+                SmallAnimations::update(nowMs);
+
+                // The startup animation is a one-time boot effect.
+                // Return to IDLE automatically after its final pulse.
+                if (SmallAnimations::isStartupComplete())
+                {
+                    Serial.println(
+                        "[ANIMATION] Boot animation finished. Entering IDLE."
+                    );
+
+                    applyMode(Mode::HEART, activeMode);
+                }
+
+                break;
+                
             case Mode::HEART:
             case Mode::RAIN:
             case Mode::WAVES:

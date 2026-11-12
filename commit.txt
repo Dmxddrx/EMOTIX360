@@ -1,58 +1,13 @@
-EMOTIX360: Add FreeRTOS-based OLED and MPU6050 task architecture
+docs: update README for EMOTIX360 ESP32-S3 migration
 
-Summary
--------
-Refactor the ESP32-S3 firmware foundation to use independent FreeRTOS tasks for
-MPU6050 acquisition and OLED rendering, with shared I2C synchronization and
-thread-safe display/sensor state.
-
-Changes
--------
-
-I2C manager
-- Centralize shared I2C initialization using the configured ESP32-S3 SDA and SCL pins.
-- Create a FreeRTOS mutex to serialize access to the shared Wire bus.
-- Add lock() and unlock() APIs for peripheral transactions.
-- Add isDeviceConnected() for checking peripheral acknowledgements.
-- Apply the configured I2C transaction timeout.
-
-MPU6050 driver
-- Keep the register-level MPU6050 implementation and existing sensor data structure.
-- Keep support for both MPU6050 addresses (0x68 and 0x69).
-- Retain 100 Hz sensor configuration, gyro-bias calibration, unit conversion and complementary filtering.
-- Add a data-ready interrupt on the configured ESP32-S3 GPIO.
-- Add a FreeRTOS task that blocks on task notifications instead of polling the sensor.
-- Protect published sensor data with a mutex and provide a thread-safe getData() snapshot API.
-- Separate sensor processing from task scheduling.
-- Correct I2C mutex handling on register reads and writes.
-- Use a 10 ms calibration interval for the 100 Hz sensor output rate.
-
-OLED display manager
-- Preserve the existing SSD1306 pages, custom fonts/icons, portrait/landscape layouts and automatic orientation handling.
-- Initialize the OLED using the already-initialized shared Wire bus.
-- Protect OLED framebuffer transfers with the shared I2C mutex.
-- Add an independent FreeRTOS OLED task using task notifications and a timed refresh.
-- Protect display status and the log queue with separate mutexes.
-- Add dedicated status update interfaces for network, power, clock, MPU and application state.
-- Use fixed-size character arrays in Status for safe status snapshots between tasks.
-- Correct OLED initialization state handling and the recursive display-flush implementation.
-- Correct the IP-address empty-string check for the fixed-size character array.
-- Keep the internal rendering update() function private to display_manager.cpp.
-- Improve the IMU page's handling of unavailable sensor data.
-
-Application coordination
-- Add General::begin() to initialize shared resources and start the peripheral tasks.
-- Keep main.cpp minimal, with no application polling or peripheral-processing logic.
-- Establish module ownership: the OLED task owns display rendering, while the MPU task owns sensor acquisition and filtering.
-
-Configuration and build
-- Centralize I2C pins, MPU interrupt pin, device addresses and bus settings in configuration headers.
-- Remove the obsolete software sensor polling interval from the device configuration when using data-ready interrupts.
-- Add include search paths so project headers can be included without directory prefixes.
-- Configure the application-size limit to match the selected 16 MB OTA partition layout (6,553,600 bytes per application slot).
-
-Notes
------
-- The MPU6050 INT output must be physically connected to the configured ESP32-S3 GPIO for interrupt-driven acquisition.
-- Verify that the board is the expected N16R8 variant before relying on the QIO flash / OPI PSRAM configuration.
-- Hardware behavior, concurrent I2C operation and task stack margins still require validation on the physical ESP32-S3.
+- Replace the outdated ESP32-C3 Water Matrix Clock documentation.
+- Document the ESP32-S3 DevKitC-1 hardware and current GPIO assignments.
+- Describe the 128-LED hourglass matrix layout and physical LED geometry.
+- Document MPU6050 motion sensing and the animation task architecture.
+- Add the seven-mode button sequence: IDLE, SAND_CLOCK, WATER,
+  SAND_GRAVITY, HEART, RAIN, and WAVES.
+- Clarify that HEART, RAIN, and WAVES remain active until the next
+  button press rather than automatically switching between effects.
+- Update PlatformIO build, upload, hardware testing, and troubleshooting
+  instructions.
+- Clarify optional and unfinished features and current validation status.

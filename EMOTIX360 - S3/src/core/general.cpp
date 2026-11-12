@@ -223,11 +223,15 @@ bool begin()
     // INITIALIZE ANIMATION MANAGER AND BUTTON
     // ------------------------------------------------------------
 
-    // Keep this initial mode identical in both managers.
+    // The animation manager starts with the one-time boot animation.
     constexpr AnimationManager::Mode INITIAL_ANIMATION_MODE =
-        AnimationManager::Mode::IDLE;
+        AnimationManager::Mode::STARTUP;
 
-    // Change to Mode::SAND_CLOCK if you prefer SandClock at startup.
+    // The button sequence starts at HEART.
+    // Therefore, the first button press selects RAIN.
+    // STARTUP is not part of the button-controlled sequence.
+    constexpr AnimationManager::Mode INITIAL_BUTTON_MODE =
+        AnimationManager::Mode::HEART;
 
     bool animationReady = false;
     bool buttonTaskStarted = false;
@@ -241,7 +245,7 @@ bool begin()
 
         if (animationReady)
         {
-            if (ButtonManager::begin(INITIAL_ANIMATION_MODE))
+            if (ButtonManager::begin(INITIAL_BUTTON_MODE))
             {
                 buttonTaskStarted = ButtonManager::startTask();
             }

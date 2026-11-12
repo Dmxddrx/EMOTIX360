@@ -38,4 +38,7 @@ void end();
 // Check initialization status.
 bool isReady();
 
+// Returns true when the one-time startup animation has finished.
+bool isStartupComplete();
+
 } // namespace SmallAnimations
