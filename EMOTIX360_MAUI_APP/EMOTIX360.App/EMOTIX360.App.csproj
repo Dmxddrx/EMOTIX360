@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net10.0-android;net10.0-ios</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>EMOTIX360.App</RootNamespace>
+    <UseMaui>true</UseMaui>
+    <SingleProject>true</SingleProject>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <ApplicationTitle>EMOTIX360</ApplicationTitle>
+    <ApplicationId>com.dmxddrx.emotix360</ApplicationId>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24.0</SupportedOSPlatformVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+	<PackageReference Include="Microsoft.Maui.Controls" Version="10.0.110" />
+	<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.15" />
+
+    <MauiIcon Include="Resources\AppIcon\appicon.svg" />
+    <MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#0B111B" BaseSize="256,256" />
+
+    <MauiXaml Update="App.xaml" Generator="MSBuild:Compile" />
+    <MauiXaml Update="AppShell.xaml" Generator="MSBuild:Compile" />
+    <MauiXaml Update="MainPage.xaml" Generator="MSBuild:Compile" />
+  </ItemGroup>
+
+</Project>

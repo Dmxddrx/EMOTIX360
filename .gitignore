@@ -1,12 +1,18 @@
 
-# PlatformIO build outputs
+# ============================================================
+# PlatformIO / ESP32 firmware
+# ============================================================
+
 .pio/
+
+# General build outputs
 build/
 Debug/
 Release/
 out/
+artifacts/
 
-# Arduino / embedded build artifacts
+# Compiled embedded artifacts
 *.o
 *.obj
 *.d
@@ -22,21 +28,83 @@ out/
 *.uf2
 *.exe
 
-# Arduino IDE and editor files
+# Arduino IDE and embedded development tools
 .arduinoIDE/
 .idea/
 *.launch
 compile_commands.json
 
-# VS Code
-# Keep project-level settings in Git if useful
+
+# ============================================================
+# .NET / .NET MAUI
+# ============================================================
+
+# Build output
+**/bin/
+**/obj/
+
+# Visual Studio local state
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.csproj.user
+*.vbproj.user
+
+# Test and coverage output
+TestResults/
+**/TestResults/
+coverage/
+*.coverage
+*.coveragexml
+
+# NuGet artifacts
+*.nupkg
+*.snupkg
+.nuget/packages/
+
+# Android build/cache output
+.gradle/
+**/.gradle/
+*.apk
+*.aab
+
+# iOS build output
+*.ipa
+*.xcarchive/
+*.dSYM/
+
+# Signing certificates and private keys
+*.keystore
+*.jks
+*.p12
+*.pfx
+*.mobileprovision
+*.provisionprofile
+*.snk
+
+# Local settings
+launchSettings.local.json
+
+
+# ============================================================
+# Editors and IDEs
+# ============================================================
+
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
 !.vscode/launch.json
 !.vscode/tasks.json
 
+.idea/
+
+
+# ============================================================
 # Local credentials and secrets
+# ============================================================
+
 arduino_secrets.h
 secrets.h
 credentials.h
@@ -44,18 +112,27 @@ wifi_config.h
 secrets/
 .env
 .env.*
+
+# Keep example templates
 !.env.example
 !.env.example.*
 !**/wifi_config.example.h
 !**/credentials.example.h
 !**/arduino_secrets.example.h
-!**/arduino_secrets.h
 
+
+# ============================================================
 # Logs
+# ============================================================
+
 *.log
 serial_*.txt
 
+
+# ============================================================
 # OS-generated files
+# ============================================================
+
 .DS_Store
 .DS_Store?
 ._*
@@ -65,7 +142,11 @@ ehthumbs.db
 Thumbs.db
 Desktop.ini
 
+
+# ============================================================
 # Temporary files and backups
+# ============================================================
+
 *.tmp
 *.bak
 *~

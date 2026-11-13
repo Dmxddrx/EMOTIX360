@@ -1,13 +1,6 @@
-docs: update README for EMOTIX360 ESP32-S3 migration
+docs: document EMOTIX360 MAUI companion app
 
-- Replace the outdated ESP32-C3 Water Matrix Clock documentation.
-- Document the ESP32-S3 DevKitC-1 hardware and current GPIO assignments.
-- Describe the 128-LED hourglass matrix layout and physical LED geometry.
-- Document MPU6050 motion sensing and the animation task architecture.
-- Add the seven-mode button sequence: IDLE, SAND_CLOCK, WATER,
-  SAND_GRAVITY, HEART, RAIN, and WAVES.
-- Clarify that HEART, RAIN, and WAVES remain active until the next
-  button press rather than automatically switching between effects.
-- Update PlatformIO build, upload, hardware testing, and troubleshooting
-  instructions.
-- Clarify optional and unfinished features and current validation status.
+- Add the Android and iOS companion app to the project overview
+- Document the .NET MAUI and Visual Studio development setup
+- Describe the BLE connection architecture and device communication
+- Add app-specific build, configuration, and development instructions

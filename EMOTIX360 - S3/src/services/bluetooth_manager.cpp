@@ -1,10 +1,9 @@
-
 #include "bluetooth_manager.h"
+#include "buzzer.h"
 
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
-#include <BLE2902.h>
 
 #include <Arduino.h>
 #include <string.h>
@@ -155,6 +154,10 @@ class CommandCallbacks final :
         enqueueCommand(
             value.c_str(),
             value.length()
+        );
+
+        Buzzer::play(
+            Buzzer::Sound::COMMAND_RECEIVED
         );
 
         Serial.printf(
@@ -326,11 +329,6 @@ bool begin()
         return false;
     }
 
-    // Required for client notification subscription.
-    statusCharacteristic->addDescriptor(
-        new BLE2902()
-    );
-
     statusCharacteristic->setValue(
         String("booting")
     );
@@ -468,9 +466,20 @@ void update()
     const bool connectedNow =
         server->getConnectedCount() > 0;
 
+    // BLE CONNECTED
     if (connectedNow)
     {
-        previousConnectionState = true;
+        if (!previousConnectionState)
+        {
+            previousConnectionState = true;
+
+            Buzzer::play(
+                Buzzer::Sound::BLE_CONNECTED
+            );
+
+            Serial.println("[BLE] Client connected");
+        }
+
         return;
     }
 
@@ -478,6 +487,10 @@ void update()
     if (previousConnectionState)
     {
         previousConnectionState = false;
+
+        Buzzer::play(
+            Buzzer::Sound::BLE_DISCONNECTED
+        );
 
         BLEDevice::startAdvertising();
 

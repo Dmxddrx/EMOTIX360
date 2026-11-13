@@ -1,6 +1,7 @@
 #include "wifi_manager.h"
 
 #include "display_manager.h"
+#include "buzzer.h"
 
 #include <WiFi.h>
 #include <Wire.h>
@@ -302,6 +303,8 @@ void wifiTask(void *parameter)
                         address[3]
                     );
 
+                    Buzzer::play(Buzzer::Sound::WIFI_CONNECTED);
+
                     // Configure SNTP only once.
                     configureNTP();
 
@@ -323,6 +326,10 @@ void wifiTask(void *parameter)
 
                         Serial.println(
                             "[WIFI] Connection lost"
+                        );
+
+                        Buzzer::play(
+                            Buzzer::Sound::WIFI_DISCONNECTED
                         );
                     }
 
@@ -367,6 +374,10 @@ void wifiTask(void *parameter)
 
                 Serial.println(
                     "[WIFI] Starting connection attempt..."
+                );
+
+                Buzzer::play(
+                    Buzzer::Sound::WIFI_CONNECTING
                 );
 
                 WiFi.begin(

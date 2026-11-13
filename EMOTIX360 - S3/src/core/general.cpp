@@ -9,126 +9,21 @@
 #include "animation_manager.h"
 #include "button.h"
 #include "bluetooth_manager.h"
+#include "buzzer.h"
 
 #include <Arduino.h>
 
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
-
 namespace General {
 namespace {
-
-constexpr uint32_t SERIAL_TASK_STACK_SIZE = 4096;
-constexpr UBaseType_t SERIAL_TASK_PRIORITY = 1;
-
-constexpr uint32_t SERIAL_REFRESH_MS = 500;
-
-TaskHandle_t serialTaskHandle = nullptr;
-
 
 // ------------------------------------------------------------
 // SERIAL DIAGNOSTIC TASK
 // ------------------------------------------------------------
 
-void serialMonitorTask(void *parameter)
+void printSerialDiagnosticHeader()
 {
-    MPU6050::Data imu{};
-
     Serial.println();
-    Serial.println("==========================================");
     Serial.println("          EMOTIX360 DIAGNOSTICS");
-    Serial.println("==========================================");
-
-    for (;;) {
-
-        if (!MPU6050::isReady() ||
-            !MPU6050::isTaskRunning()) {
-
-            Serial.println("[MPU6050] INITIALIZATION FAILED");
-        }
-        else if (!MPU6050::getData(imu)) {
-
-            Serial.println("[MPU6050] WAITING FOR SENSOR DATA");
-        }
-        else {
-
-            const uint32_t ageMs =
-                millis() - imu.timestampMs;
-
-            if (ageMs > 1000) {
-
-                Serial.printf(
-                    "[MPU6050] WARNING: STALE DATA (%lu ms)\n",
-                    (unsigned long)ageMs
-                );
-            }
-            else {
-
-                Serial.printf(
-                    "[RAW] AX:%6d AY:%6d AZ:%6d | "
-                    "GX:%6d GY:%6d GZ:%6d\n",
-                    imu.axRaw,
-                    imu.ayRaw,
-                    imu.azRaw,
-                    imu.gxRaw,
-                    imu.gyRaw,
-                    imu.gzRaw
-                );
-
-                Serial.printf(
-                    "[ACC] X:%+.3f Y:%+.3f Z:%+.3f g\n",
-                    imu.axG,
-                    imu.ayG,
-                    imu.azG
-                );
-
-                Serial.printf(
-                    "[GYR] X:%+.2f Y:%+.2f Z:%+.2f deg/s\n",
-                    imu.gxDps,
-                    imu.gyDps,
-                    imu.gzDps
-                );
-
-                Serial.printf(
-                    "[IMU] Pitch:%+.2f Roll:%+.2f Temp:%.2f C\n",
-                    imu.pitchDeg,
-                    imu.rollDeg,
-                    imu.temperatureC
-                );
-
-                Serial.printf(
-                    "[SYSTEM] Sample age:%lu ms | MPU:%s\n",
-                    (unsigned long)ageMs,
-                    imu.valid ? "VALID" : "INVALID"
-                );
-            }
-        }
-
-        Serial.println("------------------------------------------");
-
-        vTaskDelay(pdMS_TO_TICKS(SERIAL_REFRESH_MS));
-    }
-}
-
-
-// ------------------------------------------------------------
-// START SERIAL MONITOR TASK
-// ------------------------------------------------------------
-
-bool startSerialTask()
-{
-    if (serialTaskHandle != nullptr) {
-        return false;
-    }
-
-    return xTaskCreate(
-        serialMonitorTask,
-        "SerialMonitor",
-        SERIAL_TASK_STACK_SIZE,
-        nullptr,
-        SERIAL_TASK_PRIORITY,
-        &serialTaskHandle
-    ) == pdPASS;
 }
 
 } // namespace
@@ -153,10 +48,7 @@ bool begin()
     Serial.println("[GENERAL] I2C ready");
 
 
-    // --------------------------------------------------------
     // INITIALIZE MAX7219 MATRIX
-    // --------------------------------------------------------
-
     const bool matrixReady = MAX7219_Init();
 
     Serial.printf(
@@ -171,6 +63,21 @@ bool begin()
         MAX7219_Clear();
         MAX7219_Update();
     }
+
+
+    // INITIALIZE BUZZER MANAGER
+    const bool buzzerInitialized = Buzzer::begin();
+
+    bool buzzerTaskStarted = false;
+
+    if (buzzerInitialized) {
+        buzzerTaskStarted = Buzzer::startTask();
+    }
+
+    Serial.printf(
+        "[GENERAL] Buzzer Manager: %s\n",
+        buzzerTaskStarted ? "STARTED" : "FAILED"
+    );
 
     // Initialize OLED only when enabled.
     if (DeviceConfig::OLED_ENABLED) {
@@ -253,6 +160,10 @@ bool begin()
         }
     }
 
+    if (buzzerTaskStarted && animationReady) {
+        Buzzer::play(Buzzer::Sound::STARTUP);
+    }
+
     Serial.printf(
         "[GENERAL] Animation Manager: %s\n",
         animationReady ? "STARTED" : "FAILED"
@@ -322,19 +233,19 @@ bool begin()
     );
 
 
-    // Start independent Serial diagnostic task.
-    const bool serialTaskStarted = startSerialTask();
+    // --------------------------------------------------------
+    // SERIAL DIAGNOSTICS
+    // --------------------------------------------------------
 
-    Serial.printf(
-        "[GENERAL] Serial monitor: %s\n",
-        serialTaskStarted ? "STARTED" : "FAILED"
-    );
+    // No separate Serial Monitor task is needed.
+    // Other modules continue printing their own diagnostics.
 
+    Serial.println("[GENERAL] Serial monitor: STARTED");
 
-    Serial.println("==========================================");
+    printSerialDiagnosticHeader();
 
+    // INITIALIZATION RESULT
     return mpuTaskStarted &&
-       serialTaskStarted &&
        matrixReady &&
        animationReady &&
        buttonTaskStarted &&

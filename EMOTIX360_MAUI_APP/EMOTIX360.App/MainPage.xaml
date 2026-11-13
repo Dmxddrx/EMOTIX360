@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ContentPage
+    x:Class="EMOTIX360.App.MainPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    BackgroundColor="{StaticResource PageBackground}"
+    Shell.NavBarIsVisible="False">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="22,28,22,30" Spacing="22">
+
+            <!-- Brand header -->
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                <VerticalStackLayout Spacing="3" VerticalOptions="Center">
+                    <Label Text="EMOTIX360" FontSize="25" FontAttributes="Bold" LetterSpacing="1.4" />
+                    <Label Text="DEVICE COMPANION" FontSize="10" TextColor="{StaticResource SecondaryText}" CharacterSpacing="2.1" />
+                </VerticalStackLayout>
+                <Border Grid.Column="1" BackgroundColor="{StaticResource Surface}" Stroke="{StaticResource BorderColor}" StrokeThickness="1" Padding="12,9" StrokeShape="RoundRectangle 14" VerticalOptions="Center">
+                    <HorizontalStackLayout Spacing="7" VerticalOptions="Center">
+                        <Ellipse WidthRequest="7" HeightRequest="7" Fill="{StaticResource Warning}" />
+                        <Label Text="OFFLINE" FontSize="10" FontAttributes="Bold" TextColor="{StaticResource SecondaryText}" VerticalOptions="Center" />
+                    </HorizontalStackLayout>
+                </Border>
+            </Grid>
+
+            <!-- Connection panel -->
+            <Border BackgroundColor="{StaticResource Surface}" Stroke="{StaticResource BorderColor}" StrokeThickness="1" Padding="18" StrokeShape="RoundRectangle 22">
+                <VerticalStackLayout Spacing="13">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <VerticalStackLayout Spacing="4">
+                            <Label Text="DEVICE CONNECTION" FontSize="10" CharacterSpacing="1.8" TextColor="{StaticResource SecondaryText}" />
+                            <Label Text="Not connected" FontSize="22" FontAttributes="Bold" />
+                            <Label Text="Connect to your EMOTIX360 over Bluetooth LE." FontSize="12" TextColor="{StaticResource SecondaryText}" />
+                        </VerticalStackLayout>
+                        <Border Grid.Column="1" WidthRequest="52" HeightRequest="52" BackgroundColor="{StaticResource AccentMuted}" StrokeThickness="0" StrokeShape="RoundRectangle 16" VerticalOptions="Center">
+                            <Label Text="BT" TextColor="{StaticResource Accent}" FontSize="20" FontAttributes="Bold" HorizontalOptions="Center" VerticalOptions="Center" />
+                        </Border>
+                    </Grid>
+                    <Button Text="BLE CONNECTION — NEXT STEP" IsEnabled="False" BackgroundColor="{StaticResource SurfaceRaised}" TextColor="{StaticResource MutedText}" />
+                    <Label Text="The dashboard foundation is ready. Device scanning and GATT communication will be enabled in the BLE integration step." FontSize="11" TextColor="{StaticResource MutedText}" LineBreakMode="WordWrap" />
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- Live device information -->
+            <VerticalStackLayout Spacing="11">
+                <Grid ColumnDefinitions="*,Auto">
+                    <Label Text="LIVE DEVICE STATUS" FontSize="11" CharacterSpacing="1.7" TextColor="{StaticResource SecondaryText}" VerticalOptions="Center" />
+                    <Label Grid.Column="1" Text="WAITING FOR DEVICE" FontSize="9" TextColor="{StaticResource MutedText}" VerticalOptions="Center" />
+                </Grid>
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="11" RowDefinitions="Auto,Auto" RowSpacing="11">
+                    <Border BackgroundColor="{StaticResource Surface}" Stroke="{StaticResource BorderColor}" StrokeThickness="1" Padding="15" StrokeShape="RoundRectangle 17">
+                        <VerticalStackLayout Spacing="5">
+                            <Label Text="WI-FI" FontSize="10" TextColor="{StaticResource SecondaryText}" />
+                            <Label Text="—" FontSize="21" FontAttributes="Bold" />
+                            <Label Text="NETWORK" FontSize="9" TextColor="{StaticResource MutedText}" />
+                        </VerticalStackLayout>
+                    </Border>
+                    <Border Grid.Column="1" BackgroundColor="{StaticResource Surface}" Stroke="{StaticResource BorderColor}" StrokeThickness="1" Padding="15" StrokeShape="RoundRectangle 17">
+                        <VerticalStackLayout Spacing="5">
+                            <Label Text="CLOCK" FontSize="10" TextColor="{StaticResource SecondaryText}" />
+                            <Label Text="—" FontSize="21" FontAttributes="Bold" />
+                            <Label Text="TIME SYNC" FontSize="9" TextColor="{StaticResource MutedText}" />
+                        </VerticalStackLayout>
+                    </Border>
+                    <Border Grid.Row="1" BackgroundColor="{StaticResource Surface}" Stroke="{StaticResource BorderColor}" StrokeThickness="1" Padding="15" StrokeShape="RoundRectangle 17">
+                        <VerticalStackLayout Spacing="5">
+                            <Label Text="PITCH" FontSize="10" TextColor="{StaticResource SecondaryText}" />
+                            <Label Text="—°" FontSize="21" FontAttributes="Bold" />
+                            <Label Text="MPU6050" FontSize="9" TextColor="{StaticResource MutedText}" />
+                        </VerticalStackLayout>
+                    </Border>
+                    <Border Grid.Column="1" Grid.Row="1" BackgroundColor="{StaticResource Surface}" Stroke="{StaticResource BorderColor}" StrokeThickness="1" Padding="15" StrokeShape="RoundRectangle 17">
+                        <VerticalStackLayout Spacing="5">
+                            <Label Text="ROLL" FontSize="10" TextColor="{StaticResource SecondaryText}" />
+                            <Label Text="—°" FontSize="21" FontAttributes="Bold" />
+                            <Label Text="MPU6050" FontSize="9" TextColor="{StaticResource MutedText}" />
+                        </VerticalStackLayout>
+                    </Border>
+                </Grid>
+            </VerticalStackLayout>
+
+            <!-- Mode overview -->
+            <VerticalStackLayout Spacing="11">
+                <Grid ColumnDefinitions="*,Auto">
+                    <Label Text="ANIMATION MODES" FontSize="11" CharacterSpacing="1.7" TextColor="{StaticResource SecondaryText}" VerticalOptions="Center" />
+                    <Label Grid.Column="1" Text="7 MODES" FontSize="9" TextColor="{StaticResource MutedText}" VerticalOptions="Center" />
+                </Grid>
+                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="10">
+                    <Border BackgroundColor="{StaticResource AccentMuted}" Stroke="{StaticResource Accent}" StrokeThickness="1" Padding="14" StrokeShape="RoundRectangle 16">
+                        <VerticalStackLayout Spacing="5"><Label Text="01" FontSize="10" TextColor="{StaticResource Accent}" /><Label Text="IDLE" FontSize="14" FontAttributes="Bold" /><Label Text="Standby" FontSize="10" TextColor="{StaticResource SecondaryText}" /></VerticalStackLayout>
+                    </Border>
+                    <Border Grid.Column="1" BackgroundColor="{StaticResource Surface}" Stroke="{StaticResource BorderColor}" StrokeThickness="1" Padding="14" StrokeShape="RoundRectangle 16">
+                        <VerticalStackLayout Spacing="5"><Label Text="02" FontSize="10" TextColor="{StaticResource Accent}" /><Label Text="SAND CLOCK" FontSize="14" FontAttributes="Bold" /><Label Text="Particle transfer" FontSize="10" TextColor="{StaticResource SecondaryText}" /></VerticalStackLayout>
+                    </Border>
+                    <Border Grid.Row="1" BackgroundColor="{StaticResource Surface}" Stroke="{StaticResource BorderColor}" StrokeThickness="1" Padding="14" StrokeShape="RoundRectangle 16">
+                        <VerticalStackLayout Spacing="5"><Label Text="03" FontSize="10" TextColor="{StaticResource Accent}" /><Label Text="WATER" FontSize="14" FontAttributes="Bold" /><Label Text="Fluid motion" FontSize="10" TextColor="{StaticResource SecondaryText}" /></VerticalStackLayout>
+                    </Border>
+                    <Border Grid.Row="1" Grid.Column="1" BackgroundColor="{StaticResource Surface}" Stroke="{StaticResource BorderColor}" StrokeThickness="1" Padding="14" StrokeShape="RoundRectangle 16">
+                        <VerticalStackLayout Spacing="5"><Label Text="04" FontSize="10" TextColor="{StaticResource Accent}" /><Label Text="SAND GRAVITY" FontSize="14" FontAttributes="Bold" /><Label Text="Granular motion" FontSize="10" TextColor="{StaticResource SecondaryText}" /></VerticalStackLayout>
+                    </Border>
+                    <Border Grid.Row="2" BackgroundColor="{StaticResource Surface}" Stroke="{StaticResource BorderColor}" StrokeThickness="1" Padding="14" StrokeShape="RoundRectangle 16">
+                        <VerticalStackLayout Spacing="5"><Label Text="05" FontSize="10" TextColor="{StaticResource Accent}" /><Label Text="HEART" FontSize="14" FontAttributes="Bold" /><Label Text="Heartbeat" FontSize="10" TextColor="{StaticResource SecondaryText}" /></VerticalStackLayout>
+                    </Border>
+                    <Border Grid.Row="2" Grid.Column="1" BackgroundColor="{StaticResource Surface}" Stroke="{StaticResource BorderColor}" StrokeThickness="1" Padding="14" StrokeShape="RoundRectangle 16">
+                        <VerticalStackLayout Spacing="5"><Label Text="06" FontSize="10" TextColor="{StaticResource Accent}" /><Label Text="RAIN" FontSize="14" FontAttributes="Bold" /><Label Text="Gravity-driven" FontSize="10" TextColor="{StaticResource SecondaryText}" /></VerticalStackLayout>
+                    </Border>
+                    <Border Grid.Row="3" BackgroundColor="{StaticResource Surface}" Stroke="{StaticResource BorderColor}" StrokeThickness="1" Padding="14" StrokeShape="RoundRectangle 16">
+                        <VerticalStackLayout Spacing="5"><Label Text="07" FontSize="10" TextColor="{StaticResource Accent}" /><Label Text="WAVES" FontSize="14" FontAttributes="Bold" /><Label Text="Travelling wave" FontSize="10" TextColor="{StaticResource SecondaryText}" /></VerticalStackLayout>
+                    </Border>
+                    <Border Grid.Row="3" Grid.Column="1" BackgroundColor="{StaticResource Surface}" Stroke="{StaticResource BorderColor}" StrokeThickness="1" Padding="14" StrokeShape="RoundRectangle 16">
+                        <VerticalStackLayout Spacing="5"><Label Text="08" FontSize="10" TextColor="{StaticResource MutedText}" /><Label Text="MORE" FontSize="14" FontAttributes="Bold" TextColor="{StaticResource SecondaryText}" /><Label Text="Future controls" FontSize="10" TextColor="{StaticResource MutedText}" /></VerticalStackLayout>
+                    </Border>
+                </Grid>
+                <Label Text="Mode selection is shown as a preview. Controls activate after BLE is connected." FontSize="10" TextColor="{StaticResource MutedText}" />
+            </VerticalStackLayout>
+
+            <!-- Brightness preview -->
+            <Border BackgroundColor="{StaticResource Surface}" Stroke="{StaticResource BorderColor}" StrokeThickness="1" Padding="17" StrokeShape="RoundRectangle 18">
+                <VerticalStackLayout Spacing="8">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <Label Text="MATRIX BRIGHTNESS" FontSize="11" CharacterSpacing="1.4" TextColor="{StaticResource SecondaryText}" />
+                        <Label Grid.Column="1" Text="— / 15" FontSize="11" TextColor="{StaticResource MutedText}" />
+                    </Grid>
+                    <Slider Minimum="0" Maximum="15" Value="5" IsEnabled="False" MinimumTrackColor="{StaticResource Accent}" MaximumTrackColor="{StaticResource BorderColor}" ThumbColor="{StaticResource Accent}" />
+                    <Label Text="Brightness control will be available after the BLE command protocol is connected." FontSize="10" TextColor="{StaticResource MutedText}" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Label Text="EMOTIX360  •  COMPANION APP  •  BUILD 0.1" HorizontalTextAlignment="Center" FontSize="9" TextColor="{StaticResource MutedText}" CharacterSpacing="1.1" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

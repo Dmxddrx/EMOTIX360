@@ -25,6 +25,7 @@ constexpr uint32_t ANIMATION_UPDATE_INTERVAL_MS = 10;
 constexpr uint32_t ANIMATION_TASK_STACK_SIZE = 4096;
 constexpr UBaseType_t ANIMATION_TASK_PRIORITY = 1;
 
+
 // ------------------------------------------------------------
 // INTERNAL STATE
 // ------------------------------------------------------------
@@ -34,14 +35,58 @@ TaskHandle_t animationTaskHandle = nullptr;
 
 bool initialized = false;
 
+
+// ------------------------------------------------------------
+// MODE NAME HELPER
+// ------------------------------------------------------------
+
+// Return a readable name for each animation mode.
+// This makes Serial diagnostics easier to understand.
+
+const char* getModeName(Mode mode)
+{
+    switch (mode)
+    {
+        case Mode::IDLE:
+            return "IDLE";
+
+        case Mode::STARTUP:
+            return "STARTUP";
+
+        case Mode::SAND_CLOCK:
+            return "SAND_CLOCK";
+
+        case Mode::WATER:
+            return "WATER";
+
+        case Mode::SAND_GRAVITY:
+            return "SAND_GRAVITY";
+
+        case Mode::HEART:
+            return "HEART";
+
+        case Mode::RAIN:
+            return "RAIN";
+
+        case Mode::WAVES:
+            return "WAVES";
+
+        default:
+            return "UNKNOWN";
+    }
+}
+
+
 // ------------------------------------------------------------
 // SMALL ANIMATION MODE HELPERS
 // ------------------------------------------------------------
 
 // Check whether a mode belongs to the SmallAnimations module.
+
 bool isSmallAnimationMode(Mode mode)
 {
-    switch (mode) {
+    switch (mode)
+    {
         case Mode::STARTUP:
         case Mode::HEART:
         case Mode::RAIN:
@@ -56,9 +101,11 @@ bool isSmallAnimationMode(Mode mode)
 
 // Convert an AnimationManager mode into its corresponding
 // SmallAnimations effect.
+
 SmallAnimations::Effect getSmallAnimationEffect(Mode mode)
 {
-    switch (mode) {
+    switch (mode)
+    {
         case Mode::STARTUP:
             return SmallAnimations::Effect::STARTUP;
 
@@ -75,6 +122,7 @@ SmallAnimations::Effect getSmallAnimationEffect(Mode mode)
             return SmallAnimations::Effect::HEART;
     }
 }
+
 
 // ------------------------------------------------------------
 // MODE TRANSITION
@@ -113,6 +161,7 @@ void applyMode(Mode newMode, Mode &activeMode)
 
     const bool isNewSmallAnimation =
         isSmallAnimationMode(newMode);
+
 
     // --------------------------------------------------------
     // CHECK FOR THE SMOOTH STARTUP -> HEART HANDOFF
@@ -172,6 +221,8 @@ void applyMode(Mode newMode, Mode &activeMode)
         case Mode::RAIN:
         case Mode::WAVES:
         {
+            bool effectAlreadySelected = false;
+
             // Initialize SmallAnimations only when entering
             // its module from another animation module.
             if (!wasSmallAnimation)
@@ -185,22 +236,42 @@ void applyMode(Mode newMode, Mode &activeMode)
                     activeMode = Mode::IDLE;
                     return;
                 }
+
+                /*
+                 * IMPORTANT:
+                 *
+                 * SmallAnimations::begin() automatically
+                 * selects Effect::STARTUP.
+                 *
+                 * Therefore, when entering STARTUP for the
+                 * first time, do not select STARTUP again.
+                 *
+                 * For HEART, RAIN or WAVES, we still need to
+                 * explicitly select the requested effect.
+                 */
+
+                if (newMode == Mode::STARTUP) {
+                    effectAlreadySelected = true;
+                }
             }
 
-            // Select the requested effect.
-            if (!SmallAnimations::setEffect(
-                    getSmallAnimationEffect(newMode)))
+            // Select the requested effect when necessary.
+            if (!effectAlreadySelected)
             {
-                Serial.println(
-                    "[ANIMATION] Failed to select SmallAnimations effect"
-                );
+                if (!SmallAnimations::setEffect(
+                        getSmallAnimationEffect(newMode)))
+                {
+                    Serial.println(
+                        "[ANIMATION] Failed to select SmallAnimations effect"
+                    );
 
-                if (!wasSmallAnimation) {
-                    SmallAnimations::end();
+                    if (!wasSmallAnimation) {
+                        SmallAnimations::end();
+                    }
+
+                    activeMode = Mode::IDLE;
+                    return;
                 }
-
-                activeMode = Mode::IDLE;
-                return;
             }
 
             break;
@@ -228,13 +299,17 @@ void applyMode(Mode newMode, Mode &activeMode)
         }
     }
 
+
+    // Update the active mode.
     activeMode = newMode;
 
     Serial.printf(
-        "[ANIMATION] Active mode: %u\n",
+        "[ANIMATION] Active mode: %s (%u)\n",
+        getModeName(newMode),
         (unsigned int)newMode
     );
 }
+
 
 // ------------------------------------------------------------
 // ANIMATION FREERTOS TASK
@@ -273,50 +348,63 @@ void animationTask(void *parameter)
         const uint32_t nowMs = millis();
 
         // Only the AnimationManager task updates the matrix.
-        switch (activeMode) {
-
+        switch (activeMode)
+        {
             case Mode::IDLE:
+            {
                 // Nothing to update.
                 break;
+            }
 
 
             case Mode::SAND_CLOCK:
+            {
                 SandClock::update(nowMs);
                 break;
+            }
 
 
             case Mode::WATER:
+            {
                 WaterAnimation::update(nowMs);
                 break;
+            }
 
 
             case Mode::SAND_GRAVITY:
+            {
                 SandGravity::update(nowMs);
                 break;
+            }
+
 
             case Mode::STARTUP:
-
+            {
                 SmallAnimations::update(nowMs);
 
                 // The startup animation is a one-time boot effect.
-                // Return to IDLE automatically after its final pulse.
+                // Return to HEART automatically after its final pulse.
                 if (SmallAnimations::isStartupComplete())
                 {
                     Serial.println(
-                        "[ANIMATION] Boot animation finished. Entering IDLE."
+                        "[ANIMATION] Boot animation finished. Entering HEART."
                     );
 
                     applyMode(Mode::HEART, activeMode);
                 }
 
                 break;
-                
+            }
+
+
             case Mode::HEART:
             case Mode::RAIN:
             case Mode::WAVES:
+            {
                 // All four effects are updated by the same module.
                 SmallAnimations::update(nowMs);
                 break;
+            }
         }
 
         // Wait until the next scheduled animation update.
@@ -326,6 +414,7 @@ void animationTask(void *parameter)
 }
 
 } // namespace
+
 
 // ------------------------------------------------------------
 // PUBLIC API
@@ -346,7 +435,8 @@ bool begin(Mode initialMode)
     }
 
     // Store the initial animation mode.
-    if (xQueueOverwrite(modeQueue, &initialMode) != pdPASS) {
+    if (xQueueOverwrite(modeQueue, &initialMode) != pdPASS)
+    {
         vQueueDelete(modeQueue);
         modeQueue = nullptr;
 
@@ -382,7 +472,8 @@ bool startTask()
         &animationTaskHandle
     );
 
-    if (result != pdPASS) {
+    if (result != pdPASS)
+    {
         animationTaskHandle = nullptr;
 
         Serial.println("[ANIMATION] Failed to create task");
