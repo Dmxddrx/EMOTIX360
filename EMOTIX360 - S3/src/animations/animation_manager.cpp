@@ -7,6 +7,10 @@
 #include "sand_gravity.h"
 #include "small_animations.h"
 
+#include "bluetooth_manager.h"
+#include "mpu6050.h"
+#include "wifi_manager.h"
+
 #include <Arduino.h>
 
 #include <freertos/FreeRTOS.h>
@@ -25,6 +29,7 @@ constexpr uint32_t ANIMATION_UPDATE_INTERVAL_MS = 10;
 constexpr uint32_t ANIMATION_TASK_STACK_SIZE = 4096;
 constexpr UBaseType_t ANIMATION_TASK_PRIORITY = 1;
 
+constexpr uint32_t DEVICE_STATUS_PUBLISH_INTERVAL_MS = 1000;
 
 // ------------------------------------------------------------
 // INTERNAL STATE
@@ -123,6 +128,42 @@ SmallAnimations::Effect getSmallAnimationEffect(Mode mode)
     }
 }
 
+// ------------------------------------------------------------
+// PUBLISH DEVICE STATUS TO MOBILE APP
+// ------------------------------------------------------------
+
+/*
+ * Publish a read-only snapshot of EMOTIX360.
+ *
+ * The AnimationManager owns the active mode, so it is the
+ * correct place to obtain the current animation name.
+ *
+ * Brightness is READ ONLY here.
+ * The current MAX7219 intensity is reported, but never changed.
+ */
+void publishDeviceStatus(Mode activeMode)
+{
+    MPU6050::Data imu{};
+
+    // Do not publish incomplete sensor data.
+    if (!MPU6050::getData(imu) || !imu.valid) {
+        return;
+    }
+
+    BluetoothManager::setStatus(
+        imu.pitchDeg,
+        imu.rollDeg,
+
+        WifiManager::isConnected(),
+
+        WifiManager::isTimeValid(),
+
+        getModeName(activeMode),
+
+        // Read current hardware intensity only.
+        MAX7219_GetBrightness()
+    );
+}
 
 // ------------------------------------------------------------
 // MODE TRANSITION
@@ -321,6 +362,7 @@ void animationTask(void *parameter)
 
     Mode activeMode = Mode::IDLE;
     Mode requestedMode = Mode::IDLE;
+    uint32_t lastStatusPublishMs = 0;
 
     // Apply the initial mode selected during begin().
     if (xQueueReceive(modeQueue, &requestedMode, 0) == pdTRUE) {
@@ -346,6 +388,17 @@ void animationTask(void *parameter)
         }
 
         const uint32_t nowMs = millis();
+
+        // Publish a live device snapshot every second.
+        // This does not modify the display or animation brightness.
+
+        if ((uint32_t)(nowMs - lastStatusPublishMs) >=
+            DEVICE_STATUS_PUBLISH_INTERVAL_MS)
+        {
+            publishDeviceStatus(activeMode);
+
+            lastStatusPublishMs = nowMs;
+        }
 
         // Only the AnimationManager task updates the matrix.
         switch (activeMode)

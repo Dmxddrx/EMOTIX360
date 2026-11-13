@@ -20,6 +20,7 @@ public sealed class HomeViewModel : ObservableObject
     private string _wifiText = "--";
     private string _motionText = "--";
     private double _brightnessValue = 5;
+    private string _timeText = "--";
 
     public HomeViewModel(
         BluetoothService bluetooth,
@@ -119,6 +120,12 @@ public sealed class HomeViewModel : ObservableObject
         }
     }
 
+    public string TimeText
+    {
+        get => _timeText;
+        private set => SetProperty(ref _timeText, value);
+    }
+
     public string BrightnessSliderText => $"{(int)Math.Round(BrightnessValue)} / 15";
 
     private async Task SelectAnimationAsync(string? wireName)
@@ -181,6 +188,7 @@ public sealed class HomeViewModel : ObservableObject
                 BrightnessText = "--";
                 WifiText = "--";
                 MotionText = "--";
+                TimeText = "--";
             }
         });
     }
@@ -198,6 +206,7 @@ public sealed class HomeViewModel : ObservableObject
             BrightnessText = "--";
             WifiText = "--";
             MotionText = "--";
+            TimeText = "--";
         });
     }
 
@@ -215,9 +224,26 @@ public sealed class HomeViewModel : ObservableObject
         if (status.WifiConnected.HasValue)
             WifiText = status.WifiConnected.Value ? "ONLINE" : "OFFLINE";
 
-        MotionText = status.PitchDegrees.HasValue && status.RollDegrees.HasValue
-            ? "ACTIVE"
-            : "NO DATA";
+        // Display actual MPU6050 orientation.
+        if (status.PitchDegrees.HasValue &&
+            status.RollDegrees.HasValue)
+        {
+            MotionText =
+                $"P {status.PitchDegrees.Value:+0.0;-0.0;0.0}°\n" +
+                $"R {status.RollDegrees.Value:+0.0;-0.0;0.0}°";
+        }
+        else
+        {
+            MotionText = "NO DATA";
+        }
+
+        // Display NTP synchronization status.
+        if (status.TimeValid.HasValue)
+        {
+            TimeText = status.TimeValid.Value
+                ? "NTP SYNCHRONIZED"
+                : "NOT SYNCHRONIZED";
+        }
 
         if (IsConnected)
             DashboardMessage = $"Last device update: {status.ReceivedAt.ToLocalTime():HH:mm:ss}";

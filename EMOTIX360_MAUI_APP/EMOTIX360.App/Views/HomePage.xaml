@@ -151,7 +151,7 @@
 
                     <Button
                         Text="{Binding ConnectButtonText}"
-
+                        Command="{Binding OpenDeviceCommand}"
                         BackgroundColor="#397FE8"
                         TextColor="White"
                         FontAttributes="Bold"
@@ -295,8 +295,8 @@
                                 TextColor="#72C9A0" />
 
                             <Label
-                                Text="Network status"
-                                FontSize="11"
+                                Text="{Binding TimeText}"
+                                FontSize="10"
                                 TextColor="#7789A3" />
 
                         </VerticalStackLayout>
