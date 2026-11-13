@@ -1,14 +1,35 @@
 <?xml version="1.0" encoding="UTF-8" ?>
+
 <Shell
     x:Class="EMOTIX360.App.AppShell"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-    xmlns:local="clr-namespace:EMOTIX360.App"
+    xmlns:views="clr-namespace:EMOTIX360.App.Views"
     FlyoutBehavior="Disabled"
     Shell.NavBarIsVisible="False"
-    Shell.TabBarIsVisible="False">
+    Shell.TabBarIsVisible="True">
 
-    <ShellContent
-        Route="dashboard"
-        ContentTemplate="{DataTemplate local:MainPage}" />
+    <!-- Main application navigation -->
+    <TabBar>
+
+        <!-- HOME DASHBOARD -->
+        <ShellContent
+            Title="Home"
+            Route="home"
+            ContentTemplate="{DataTemplate views:HomePage}" />
+
+        <!-- DEVICE CONNECTION -->
+        <ShellContent
+            Title="Device"
+            Route="device"
+            ContentTemplate="{DataTemplate views:DevicePage}" />
+
+        <!-- APPLICATION SETTINGS -->
+        <ShellContent
+            Title="Settings"
+            Route="settings"
+            ContentTemplate="{DataTemplate views:SettingsPage}" />
+
+    </TabBar>
+
 </Shell>

@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFrameworks>net10.0-android;net10.0-ios</TargetFrameworks>
@@ -27,6 +27,20 @@
     <MauiXaml Update="App.xaml" Generator="MSBuild:Compile" />
     <MauiXaml Update="AppShell.xaml" Generator="MSBuild:Compile" />
     <MauiXaml Update="MainPage.xaml" Generator="MSBuild:Compile" />
+    <MauiXaml Update="Views\DevicePage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </MauiXaml>
+    <MauiXaml Update="Views\HomePage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </MauiXaml>
+    <MauiXaml Update="Views\SettingsPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </MauiXaml>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Resources\Images\" />
+    <Folder Include="Resources\Fonts\" />
   </ItemGroup>
 
 </Project>

@@ -1,0 +1,551 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<ContentPage
+    x:Class="EMOTIX360.App.Views.HomePage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    Title="Home"
+    BackgroundColor="#0B111B"
+    Shell.NavBarIsVisible="False">
+
+    <ScrollView>
+        <VerticalStackLayout
+            Padding="22,26,22,30"
+            Spacing="23">
+
+            <!-- HEADER -->
+            <Grid ColumnDefinitions="*,Auto">
+
+                <VerticalStackLayout Spacing="3">
+
+                    <Label
+                        Text="EMOTIX360"
+                        FontSize="21"
+                        FontAttributes="Bold"
+                        CharacterSpacing="2"
+                        TextColor="#F2F5FC" />
+
+                    <Label
+                        Text="INTERACTIVE DISPLAY CONTROL"
+                        FontSize="10"
+                        CharacterSpacing="1.5"
+                        TextColor="#8291A8" />
+
+                </VerticalStackLayout>
+
+                <!-- CONNECTION INDICATOR -->
+                <Border
+                    Grid.Column="1"
+                    BackgroundColor="#192638"
+                    Stroke="#293B52"
+                    StrokeThickness="1"
+                    Padding="12,8"
+                    VerticalOptions="Center">
+
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="20" />
+                    </Border.StrokeShape>
+
+                    <HorizontalStackLayout
+                        Spacing="7"
+                        VerticalOptions="Center">
+
+                        <Ellipse
+                            WidthRequest="7"
+                            HeightRequest="7"
+                            Fill="#F2A65A"
+                            VerticalOptions="Center" />
+
+                        <Label
+                            Text="OFFLINE"
+                            FontSize="10"
+                            FontAttributes="Bold"
+                            CharacterSpacing="1"
+                            TextColor="#D0DAE8"
+                            VerticalOptions="Center" />
+
+                    </HorizontalStackLayout>
+
+                </Border>
+
+            </Grid>
+
+
+            <!-- WELCOME -->
+            <VerticalStackLayout Spacing="5">
+
+                <Label
+                    Text="Your device."
+                    FontSize="32"
+                    FontAttributes="Bold"
+                    TextColor="#F2F5FC" />
+
+                <Label
+                    Text="Your experience."
+                    FontSize="32"
+                    FontAttributes="Bold"
+                    TextColor="#5796FF" />
+
+                <Label
+                    Text="Control and explore your EMOTIX360."
+                    FontSize="14"
+                    TextColor="#8999AF"
+                    Margin="0,5,0,0" />
+
+            </VerticalStackLayout>
+
+
+            <!-- DEVICE CONNECTION CARD -->
+            <Border
+                BackgroundColor="#142135"
+                Stroke="#263C58"
+                StrokeThickness="1"
+                Padding="19">
+
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="22" />
+                </Border.StrokeShape>
+
+                <VerticalStackLayout Spacing="15">
+
+                    <Grid ColumnDefinitions="*,Auto">
+
+                        <Label
+                            Text="DEVICE CONNECTION"
+                            FontSize="11"
+                            FontAttributes="Bold"
+                            CharacterSpacing="1.5"
+                            TextColor="#91A4BF"
+                            VerticalOptions="Center" />
+
+                        <Label
+                            Grid.Column="1"
+                            Text="BLE"
+                            FontSize="11"
+                            FontAttributes="Bold"
+                            TextColor="#5796FF"
+                            VerticalOptions="Center" />
+
+                    </Grid>
+
+                    <VerticalStackLayout Spacing="4">
+
+                        <Label
+                            Text="EMOTIX360"
+                            FontSize="24"
+                            FontAttributes="Bold"
+                            TextColor="#F4F7FC" />
+
+                        <Label
+                            Text="Not connected"
+                            FontSize="14"
+                            TextColor="#F2A65A" />
+
+                    </VerticalStackLayout>
+
+                    <Label
+                        Text="Connect to your display to access animations, brightness and live device information."
+                        FontSize="13"
+                        TextColor="#9BAAC0"
+                        LineHeight="1.35" />
+
+                    <Button
+                        Text="CONNECT DEVICE"
+                        Clicked="OnConnectDeviceClicked"
+                        BackgroundColor="#397FE8"
+                        TextColor="White"
+                        FontAttributes="Bold"
+                        CharacterSpacing="1"
+                        FontSize="13"
+                        HeightRequest="52"
+                        CornerRadius="14" />
+
+                </VerticalStackLayout>
+
+            </Border>
+
+
+            <!-- DEVICE OVERVIEW -->
+            <VerticalStackLayout Spacing="12">
+
+                <Grid ColumnDefinitions="*,Auto">
+
+                    <Label
+                        Text="DEVICE OVERVIEW"
+                        FontSize="13"
+                        FontAttributes="Bold"
+                        CharacterSpacing="1"
+                        TextColor="#E8EDF7" />
+
+                    <Label
+                        Grid.Column="1"
+                        Text="AWAITING CONNECTION"
+                        FontSize="9"
+                        CharacterSpacing="0.7"
+                        TextColor="#7789A3"
+                        VerticalOptions="Center" />
+
+                </Grid>
+
+                <Grid
+                    ColumnDefinitions="*,*"
+                    RowDefinitions="Auto,Auto"
+                    ColumnSpacing="11"
+                    RowSpacing="11">
+
+                    <!-- ACTIVE MODE -->
+                    <Border
+                        Grid.Row="0"
+                        Grid.Column="0"
+                        BackgroundColor="#121C2B"
+                        Stroke="#233248"
+                        StrokeThickness="1"
+                        Padding="15">
+
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="17" />
+                        </Border.StrokeShape>
+
+                        <VerticalStackLayout Spacing="9">
+
+                            <Label
+                                Text="ACTIVE MODE"
+                                FontSize="10"
+                                CharacterSpacing="1"
+                                TextColor="#8495AE" />
+
+                            <Label
+                                Text="--"
+                                FontSize="23"
+                                FontAttributes="Bold"
+                                TextColor="#5796FF" />
+
+                            <Label
+                                Text="Animation"
+                                FontSize="11"
+                                TextColor="#7789A3" />
+
+                        </VerticalStackLayout>
+
+                    </Border>
+
+
+                    <!-- BRIGHTNESS -->
+                    <Border
+                        Grid.Row="0"
+                        Grid.Column="1"
+                        BackgroundColor="#121C2B"
+                        Stroke="#233248"
+                        StrokeThickness="1"
+                        Padding="15">
+
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="17" />
+                        </Border.StrokeShape>
+
+                        <VerticalStackLayout Spacing="9">
+
+                            <Label
+                                Text="BRIGHTNESS"
+                                FontSize="10"
+                                CharacterSpacing="1"
+                                TextColor="#8495AE" />
+
+                            <Label
+                                Text="--"
+                                FontSize="23"
+                                FontAttributes="Bold"
+                                TextColor="#E5BD70" />
+
+                            <Label
+                                Text="Matrix intensity"
+                                FontSize="11"
+                                TextColor="#7789A3" />
+
+                        </VerticalStackLayout>
+
+                    </Border>
+
+
+                    <!-- WIFI STATUS -->
+                    <Border
+                        Grid.Row="1"
+                        Grid.Column="0"
+                        BackgroundColor="#121C2B"
+                        Stroke="#233248"
+                        StrokeThickness="1"
+                        Padding="15">
+
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="17" />
+                        </Border.StrokeShape>
+
+                        <VerticalStackLayout Spacing="9">
+
+                            <Label
+                                Text="WI-FI"
+                                FontSize="10"
+                                CharacterSpacing="1"
+                                TextColor="#8495AE" />
+
+                            <Label
+                                Text="--"
+                                FontSize="20"
+                                FontAttributes="Bold"
+                                TextColor="#72C9A0" />
+
+                            <Label
+                                Text="Network status"
+                                FontSize="11"
+                                TextColor="#7789A3" />
+
+                        </VerticalStackLayout>
+
+                    </Border>
+
+
+                    <!-- MOTION SENSOR -->
+                    <Border
+                        Grid.Row="1"
+                        Grid.Column="1"
+                        BackgroundColor="#121C2B"
+                        Stroke="#233248"
+                        StrokeThickness="1"
+                        Padding="15">
+
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="17" />
+                        </Border.StrokeShape>
+
+                        <VerticalStackLayout Spacing="9">
+
+                            <Label
+                                Text="MOTION SENSOR"
+                                FontSize="10"
+                                CharacterSpacing="1"
+                                TextColor="#8495AE" />
+
+                            <Label
+                                Text="--"
+                                FontSize="20"
+                                FontAttributes="Bold"
+                                TextColor="#C49AFF" />
+
+                            <Label
+                                Text="MPU6050 status"
+                                FontSize="11"
+                                TextColor="#7789A3" />
+
+                        </VerticalStackLayout>
+
+                    </Border>
+
+                </Grid>
+
+            </VerticalStackLayout>
+
+
+            <!-- ANIMATION MODES -->
+            <VerticalStackLayout Spacing="12">
+
+                <Grid ColumnDefinitions="*,Auto">
+
+                    <Label
+                        Text="ANIMATIONS"
+                        FontSize="13"
+                        FontAttributes="Bold"
+                        CharacterSpacing="1"
+                        TextColor="#E8EDF7" />
+
+                    <Label
+                        Grid.Column="1"
+                        Text="7 MODES"
+                        FontSize="10"
+                        TextColor="#7789A3"
+                        VerticalOptions="Center" />
+
+                </Grid>
+
+                <Grid
+                    ColumnDefinitions="*,*"
+                    RowDefinitions="Auto,Auto,Auto,Auto"
+                    ColumnSpacing="10"
+                    RowSpacing="10">
+
+                    <Border
+                        Grid.Row="0"
+                        Grid.Column="0"
+                        BackgroundColor="#17253A"
+                        Stroke="#5796FF"
+                        StrokeThickness="1"
+                        Padding="13">
+
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="13" />
+                        </Border.StrokeShape>
+
+                        <Label
+                            Text="IDLE"
+                            TextColor="#8EB6FF"
+                            FontSize="12"
+                            FontAttributes="Bold"
+                            HorizontalTextAlignment="Center" />
+
+                    </Border>
+
+                    <Border
+                        Grid.Row="0"
+                        Grid.Column="1"
+                        BackgroundColor="#121C2B"
+                        Stroke="#26364A"
+                        Padding="13">
+
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="13" />
+                        </Border.StrokeShape>
+
+                        <Label
+                            Text="SAND CLOCK"
+                            TextColor="#C4D0E0"
+                            FontSize="12"
+                            FontAttributes="Bold"
+                            HorizontalTextAlignment="Center" />
+
+                    </Border>
+
+                    <Border
+                        Grid.Row="1"
+                        Grid.Column="0"
+                        BackgroundColor="#121C2B"
+                        Stroke="#26364A"
+                        Padding="13">
+
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="13" />
+                        </Border.StrokeShape>
+
+                        <Label
+                            Text="WATER"
+                            TextColor="#C4D0E0"
+                            FontSize="12"
+                            FontAttributes="Bold"
+                            HorizontalTextAlignment="Center" />
+
+                    </Border>
+
+                    <Border
+                        Grid.Row="1"
+                        Grid.Column="1"
+                        BackgroundColor="#121C2B"
+                        Stroke="#26364A"
+                        Padding="13">
+
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="13" />
+                        </Border.StrokeShape>
+
+                        <Label
+                            Text="SAND GRAVITY"
+                            TextColor="#C4D0E0"
+                            FontSize="12"
+                            FontAttributes="Bold"
+                            HorizontalTextAlignment="Center" />
+
+                    </Border>
+
+                    <Border
+                        Grid.Row="2"
+                        Grid.Column="0"
+                        BackgroundColor="#121C2B"
+                        Stroke="#26364A"
+                        Padding="13">
+
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="13" />
+                        </Border.StrokeShape>
+
+                        <Label
+                            Text="HEART"
+                            TextColor="#C4D0E0"
+                            FontSize="12"
+                            FontAttributes="Bold"
+                            HorizontalTextAlignment="Center" />
+
+                    </Border>
+
+                    <Border
+                        Grid.Row="2"
+                        Grid.Column="1"
+                        BackgroundColor="#121C2B"
+                        Stroke="#26364A"
+                        Padding="13">
+
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="13" />
+                        </Border.StrokeShape>
+
+                        <Label
+                            Text="RAIN"
+                            TextColor="#C4D0E0"
+                            FontSize="12"
+                            FontAttributes="Bold"
+                            HorizontalTextAlignment="Center" />
+
+                    </Border>
+
+                    <Border
+                        Grid.Row="3"
+                        Grid.Column="0"
+                        BackgroundColor="#121C2B"
+                        Stroke="#26364A"
+                        Padding="13">
+
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="13" />
+                        </Border.StrokeShape>
+
+                        <Label
+                            Text="WAVES"
+                            TextColor="#C4D0E0"
+                            FontSize="12"
+                            FontAttributes="Bold"
+                            HorizontalTextAlignment="Center" />
+
+                    </Border>
+
+                </Grid>
+
+                <Label
+                    Text="Connect your device to control its animations."
+                    FontSize="11"
+                    TextColor="#7789A3" />
+
+            </VerticalStackLayout>
+
+
+            <!-- FOOTER -->
+            <VerticalStackLayout
+                Spacing="4"
+                HorizontalOptions="Center"
+                Margin="0,5,0,0">
+
+                <Label
+                    Text="EMOTIX360"
+                    FontSize="11"
+                    FontAttributes="Bold"
+                    CharacterSpacing="2"
+                    TextColor="#60748F"
+                    HorizontalTextAlignment="Center" />
+
+                <Label
+                    Text="Interactive Motion-Aware Display"
+                    FontSize="10"
+                    TextColor="#53657C"
+                    HorizontalTextAlignment="Center" />
+
+            </VerticalStackLayout>
+
+        </VerticalStackLayout>
+    </ScrollView>
+
+</ContentPage>
