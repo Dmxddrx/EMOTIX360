@@ -53,11 +53,11 @@
                         <Ellipse
                             WidthRequest="7"
                             HeightRequest="7"
-                            Fill="#F2A65A"
+                            Fill="{Binding ConnectionIndicatorColor}"
                             VerticalOptions="Center" />
 
                         <Label
-                            Text="OFFLINE"
+                            Text="{Binding ConnectionText}"
                             FontSize="10"
                             FontAttributes="Bold"
                             CharacterSpacing="1"
@@ -137,7 +137,7 @@
                             TextColor="#F4F7FC" />
 
                         <Label
-                            Text="Not connected"
+                            Text="{Binding ConnectionDescription}"
                             FontSize="14"
                             TextColor="#F2A65A" />
 
@@ -150,8 +150,8 @@
                         LineHeight="1.35" />
 
                     <Button
-                        Text="CONNECT DEVICE"
-                        Clicked="OnConnectDeviceClicked"
+                        Text="{Binding ConnectButtonText}"
+
                         BackgroundColor="#397FE8"
                         TextColor="White"
                         FontAttributes="Bold"
@@ -179,7 +179,7 @@
 
                     <Label
                         Grid.Column="1"
-                        Text="AWAITING CONNECTION"
+                        Text="{Binding OverviewStatusText}"
                         FontSize="9"
                         CharacterSpacing="0.7"
                         TextColor="#7789A3"
@@ -215,7 +215,7 @@
                                 TextColor="#8495AE" />
 
                             <Label
-                                Text="--"
+                                Text="{Binding ActiveModeText}"
                                 FontSize="23"
                                 FontAttributes="Bold"
                                 TextColor="#5796FF" />
@@ -252,7 +252,7 @@
                                 TextColor="#8495AE" />
 
                             <Label
-                                Text="--"
+                                Text="{Binding BrightnessText}"
                                 FontSize="23"
                                 FontAttributes="Bold"
                                 TextColor="#E5BD70" />
@@ -289,7 +289,7 @@
                                 TextColor="#8495AE" />
 
                             <Label
-                                Text="--"
+                                Text="{Binding WifiText}"
                                 FontSize="20"
                                 FontAttributes="Bold"
                                 TextColor="#72C9A0" />
@@ -326,7 +326,7 @@
                                 TextColor="#8495AE" />
 
                             <Label
-                                Text="--"
+                                Text="{Binding MotionText}"
                                 FontSize="20"
                                 FontAttributes="Bold"
                                 TextColor="#C49AFF" />
@@ -342,7 +342,29 @@
 
                 </Grid>
 
-            </VerticalStackLayout>
+                            <VerticalStackLayout Spacing="8" Margin="0,4,0,0">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <Label Text="MATRIX BRIGHTNESS"
+                               FontSize="10" FontAttributes="Bold"
+                               CharacterSpacing="1" TextColor="#8495AE" />
+                        <Label Grid.Column="1"
+                               Text="{Binding BrightnessSliderText}"
+                               FontSize="11" FontAttributes="Bold"
+                               TextColor="#E5BD70" />
+                    </Grid>
+                    <Slider Minimum="0" Maximum="15"
+                            Value="{Binding BrightnessValue, Mode=TwoWay}"
+                            MinimumTrackColor="#5796FF"
+                            MaximumTrackColor="#26364A"
+                            ThumbColor="#F2F5FC" />
+                    <Button Text="APPLY BRIGHTNESS"
+                            Command="{Binding ApplyBrightnessCommand}"
+                            BackgroundColor="#263C58"
+                            TextColor="#DDE9FF"
+                            FontAttributes="Bold" FontSize="11"
+                            HeightRequest="44" CornerRadius="12" />
+                </VerticalStackLayout>
+</VerticalStackLayout>
 
 
             <!-- ANIMATION MODES -->
@@ -384,7 +406,12 @@
                             <RoundRectangle CornerRadius="13" />
                         </Border.StrokeShape>
 
-                        <Label
+                                                <Border.GestureRecognizers>
+                            <TapGestureRecognizer
+                                Command="{Binding SelectAnimationCommand}"
+                                CommandParameter="IDLE" />
+                        </Border.GestureRecognizers>
+<Label
                             Text="IDLE"
                             TextColor="#8EB6FF"
                             FontSize="12"
@@ -404,7 +431,12 @@
                             <RoundRectangle CornerRadius="13" />
                         </Border.StrokeShape>
 
-                        <Label
+                                                <Border.GestureRecognizers>
+                            <TapGestureRecognizer
+                                Command="{Binding SelectAnimationCommand}"
+                                CommandParameter="SAND_CLOCK" />
+                        </Border.GestureRecognizers>
+<Label
                             Text="SAND CLOCK"
                             TextColor="#C4D0E0"
                             FontSize="12"
@@ -424,7 +456,12 @@
                             <RoundRectangle CornerRadius="13" />
                         </Border.StrokeShape>
 
-                        <Label
+                                                <Border.GestureRecognizers>
+                            <TapGestureRecognizer
+                                Command="{Binding SelectAnimationCommand}"
+                                CommandParameter="WATER" />
+                        </Border.GestureRecognizers>
+<Label
                             Text="WATER"
                             TextColor="#C4D0E0"
                             FontSize="12"
@@ -444,7 +481,12 @@
                             <RoundRectangle CornerRadius="13" />
                         </Border.StrokeShape>
 
-                        <Label
+                                                <Border.GestureRecognizers>
+                            <TapGestureRecognizer
+                                Command="{Binding SelectAnimationCommand}"
+                                CommandParameter="SAND_GRAVITY" />
+                        </Border.GestureRecognizers>
+<Label
                             Text="SAND GRAVITY"
                             TextColor="#C4D0E0"
                             FontSize="12"
@@ -464,7 +506,12 @@
                             <RoundRectangle CornerRadius="13" />
                         </Border.StrokeShape>
 
-                        <Label
+                                                <Border.GestureRecognizers>
+                            <TapGestureRecognizer
+                                Command="{Binding SelectAnimationCommand}"
+                                CommandParameter="HEART" />
+                        </Border.GestureRecognizers>
+<Label
                             Text="HEART"
                             TextColor="#C4D0E0"
                             FontSize="12"
@@ -484,7 +531,12 @@
                             <RoundRectangle CornerRadius="13" />
                         </Border.StrokeShape>
 
-                        <Label
+                                                <Border.GestureRecognizers>
+                            <TapGestureRecognizer
+                                Command="{Binding SelectAnimationCommand}"
+                                CommandParameter="RAIN" />
+                        </Border.GestureRecognizers>
+<Label
                             Text="RAIN"
                             TextColor="#C4D0E0"
                             FontSize="12"
@@ -504,7 +556,12 @@
                             <RoundRectangle CornerRadius="13" />
                         </Border.StrokeShape>
 
-                        <Label
+                                                <Border.GestureRecognizers>
+                            <TapGestureRecognizer
+                                Command="{Binding SelectAnimationCommand}"
+                                CommandParameter="WAVES" />
+                        </Border.GestureRecognizers>
+<Label
                             Text="WAVES"
                             TextColor="#C4D0E0"
                             FontSize="12"
@@ -516,7 +573,7 @@
                 </Grid>
 
                 <Label
-                    Text="Connect your device to control its animations."
+                    Text="{Binding DashboardMessage}"
                     FontSize="11"
                     TextColor="#7789A3" />
 

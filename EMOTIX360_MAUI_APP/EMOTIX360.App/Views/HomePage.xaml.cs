@@ -1,17 +1,13 @@
+using Microsoft.Maui.Controls;
+using EMOTIX360.App.ViewModels;
 
 namespace EMOTIX360.App.Views;
 
 public partial class HomePage : ContentPage
 {
-    public HomePage()
+    public HomePage(HomeViewModel viewModel)
     {
         InitializeComponent();
-    }
-
-    private async void OnConnectDeviceClicked(
-        object sender,
-        EventArgs e)
-    {
-        await Shell.Current.GoToAsync("//device");
+        BindingContext = viewModel;
     }
 }

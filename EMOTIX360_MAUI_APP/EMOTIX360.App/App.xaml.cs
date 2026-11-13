@@ -1,21 +1,21 @@
-
 namespace EMOTIX360.App;
 
 public partial class App : Application
 {
-    public App()
+    private readonly AppShell _appShell;
+
+    public App(AppShell appShell)
     {
         InitializeComponent();
 
         // EMOTIX360 uses a dark dashboard by default.
         UserAppTheme = AppTheme.Dark;
+
+        _appShell = appShell;
     }
 
-    // Create the main application window.
-    // AppShell remains the root navigation interface.
-    protected override Window CreateWindow(
-        IActivationState? activationState)
+    protected override Window CreateWindow(IActivationState? activationState)
     {
-        return new Window(new AppShell());
+        return new Window(_appShell);
     }
 }

@@ -9,200 +9,107 @@
     Shell.NavBarIsVisible="False">
 
     <ScrollView>
-
-        <VerticalStackLayout
-            Padding="22,26,22,30"
-            Spacing="22">
+        <VerticalStackLayout Padding="22,26,22,30" Spacing="20">
 
             <VerticalStackLayout Spacing="5">
-
-                <Label
-                    Text="DEVICE"
-                    FontSize="11"
-                    CharacterSpacing="2"
-                    FontAttributes="Bold"
-                    TextColor="#5796FF" />
-
-                <Label
-                    Text="Bluetooth"
-                    FontSize="32"
-                    FontAttributes="Bold"
-                    TextColor="#F2F5FC" />
-
-                <Label
-                    Text="Connect your phone to EMOTIX360."
-                    FontSize="14"
-                    TextColor="#8999AF" />
-
+                <Label Text="DEVICE" FontSize="11" CharacterSpacing="2"
+                       FontAttributes="Bold" TextColor="#5796FF" />
+                <Label Text="Bluetooth" FontSize="32" FontAttributes="Bold"
+                       TextColor="#F2F5FC" />
+                <Label Text="Discover and connect to your EMOTIX360 display."
+                       FontSize="14" TextColor="#8999AF" />
             </VerticalStackLayout>
 
-
-            <!-- CONNECTION STATUS -->
-            <Border
-                BackgroundColor="#142135"
-                Stroke="#263C58"
-                StrokeThickness="1"
-                Padding="20">
-
+            <Border BackgroundColor="#142135" Stroke="#263C58"
+                    StrokeThickness="1" Padding="19">
                 <Border.StrokeShape>
                     <RoundRectangle CornerRadius="20" />
                 </Border.StrokeShape>
-
-                <VerticalStackLayout
-                    Spacing="12"
-                    HorizontalOptions="Center">
-
-                    <Border
-                        WidthRequest="76"
-                        HeightRequest="76"
-                        BackgroundColor="#1D3454"
-                        Stroke="#365782"
-                        StrokeThickness="1"
-                        HorizontalOptions="Center">
-
-                        <Border.StrokeShape>
-                            <RoundRectangle CornerRadius="24" />
-                        </Border.StrokeShape>
-
-                        <Label
-                            Text="BLE"
-                            FontSize="22"
-                            FontAttributes="Bold"
-                            TextColor="#78A8FF"
-                            HorizontalTextAlignment="Center"
-                            VerticalTextAlignment="Center" />
-
-                    </Border>
-
-                    <Label
-                        Text="Not connected"
-                        FontSize="21"
-                        FontAttributes="Bold"
-                        TextColor="#F2F5FC"
-                        HorizontalTextAlignment="Center" />
-
-                    <Label
-                        Text="Your phone is not currently connected to an EMOTIX360 device."
-                        FontSize="13"
-                        TextColor="#92A2B8"
-                        HorizontalTextAlignment="Center" />
-
+                <VerticalStackLayout Spacing="10">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <Label Text="CONNECTION STATUS" FontSize="11"
+                               CharacterSpacing="1.2" FontAttributes="Bold"
+                               TextColor="#91A4BF" />
+                        <Label Grid.Column="1" Text="BLE" FontSize="11"
+                               FontAttributes="Bold" TextColor="#5796FF" />
+                    </Grid>
+                    <Label Text="{Binding ConnectionText}" FontSize="22"
+                           FontAttributes="Bold" TextColor="#F2F5FC" />
+                    <Label Text="{Binding StatusMessage}" FontSize="13"
+                           TextColor="#9BAAC0" LineBreakMode="WordWrap" />
+                    <Button Text="{Binding ScanButtonText}" Command="{Binding ScanCommand}"
+                            IsEnabled="{Binding CanScan}" BackgroundColor="#397FE8"
+                            TextColor="White" FontAttributes="Bold"
+                            CharacterSpacing="1" FontSize="13" HeightRequest="50"
+                            CornerRadius="14" />
                 </VerticalStackLayout>
-
             </Border>
 
+            <VerticalStackLayout Spacing="11">
+                <Grid ColumnDefinitions="*,Auto">
+                    <Label Text="DISCOVERED DEVICES" FontSize="12"
+                           FontAttributes="Bold" CharacterSpacing="1"
+                           TextColor="#DFE7F3" />
+                    <Label Grid.Column="1" Text="EMOTIX360" FontSize="10"
+                           TextColor="#7789A3" />
+                </Grid>
 
-            <!-- EXPECTED DEVICE -->
-            <VerticalStackLayout Spacing="12">
-
-                <Label
-                    Text="YOUR DEVICE"
-                    FontSize="12"
-                    FontAttributes="Bold"
-                    CharacterSpacing="1.2"
-                    TextColor="#DFE7F3" />
-
-                <Border
-                    BackgroundColor="#121C2B"
-                    Stroke="#26364A"
-                    StrokeThickness="1"
-                    Padding="17">
-
-                    <Border.StrokeShape>
-                        <RoundRectangle CornerRadius="17" />
-                    </Border.StrokeShape>
-
-                    <Grid ColumnDefinitions="*,Auto">
-
-                        <VerticalStackLayout Spacing="5">
-
-                            <Label
-                                Text="EMOTIX360"
-                                FontSize="17"
-                                FontAttributes="Bold"
-                                TextColor="#F2F5FC" />
-
-                            <Label
-                                Text="ESP32-S3 BLE device"
-                                FontSize="12"
-                                TextColor="#8999AF" />
-
-                            <Label
-                                Text="Expected device name"
-                                FontSize="10"
-                                TextColor="#667991" />
-
-                        </VerticalStackLayout>
-
-                        <Border
-                            Grid.Column="1"
-                            BackgroundColor="#263C58"
-                            Padding="10,7"
-                            VerticalOptions="Center">
-
+                <CollectionView ItemsSource="{Binding Devices}"
+                                SelectedItem="{Binding SelectedDevice, Mode=TwoWay}"
+                                SelectionMode="Single"
+                                HeightRequest="240">
+                    <CollectionView.EmptyView>
+                        <Border BackgroundColor="#121C2B" Stroke="#26364A"
+                                Padding="16">
                             <Border.StrokeShape>
-                                <RoundRectangle CornerRadius="10" />
+                                <RoundRectangle CornerRadius="14" />
                             </Border.StrokeShape>
-
-                            <Label
-                                Text="KNOWN"
-                                FontSize="9"
-                                FontAttributes="Bold"
-                                TextColor="#A9C8FF" />
-
+                            <Label Text="Tap SCAN FOR EMOTIX360 to search for your ESP32-S3."
+                                   TextColor="#8999AF" FontSize="12" />
                         </Border>
+                    </CollectionView.EmptyView>
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate>
+                            <Border BackgroundColor="#121C2B" Stroke="#26364A"
+                                    StrokeThickness="1" Padding="15" Margin="0,4">
+                                <Border.StrokeShape>
+                                    <RoundRectangle CornerRadius="15" />
+                                </Border.StrokeShape>
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <VerticalStackLayout Spacing="4">
+                                        <Label Text="{Binding Name}" FontSize="15"
+                                               FontAttributes="Bold" TextColor="#F2F5FC" />
+                                        <Label Text="ESP32-S3 Bluetooth LE device"
+                                               FontSize="11" TextColor="#8999AF" />
+                                    </VerticalStackLayout>
+                                    <Label Grid.Column="1" Text="{Binding SignalText}"
+                                           FontSize="10" TextColor="#78A8FF"
+                                           VerticalOptions="Center" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
 
-                    </Grid>
+                <Button Text="CONNECT SELECTED DEVICE"
+                        Command="{Binding ConnectSelectedCommand}"
+                        IsEnabled="{Binding CanConnectSelected}"
+                        BackgroundColor="#397FE8" TextColor="White"
+                        FontAttributes="Bold" CharacterSpacing="0.8"
+                        FontSize="12" HeightRequest="49" CornerRadius="14" />
 
-                </Border>
-
+                <Button Text="DISCONNECT"
+                        Command="{Binding DisconnectCommand}"
+                        IsVisible="{Binding IsConnected}"
+                        BackgroundColor="#3A2029" TextColor="#FFB8C2"
+                        FontAttributes="Bold" FontSize="12"
+                        HeightRequest="46" CornerRadius="14" />
             </VerticalStackLayout>
 
-
-            <!-- SCANNING PLACEHOLDER -->
-            <Border
-                BackgroundColor="#121C2B"
-                Stroke="#26364A"
-                StrokeThickness="1"
-                Padding="18">
-
-                <Border.StrokeShape>
-                    <RoundRectangle CornerRadius="17" />
-                </Border.StrokeShape>
-
-                <VerticalStackLayout Spacing="10">
-
-                    <Label
-                        Text="NEARBY DEVICES"
-                        FontSize="12"
-                        FontAttributes="Bold"
-                        CharacterSpacing="1"
-                        TextColor="#DFE7F3" />
-
-                    <Label
-                        Text="Device discovery is not enabled yet."
-                        FontSize="13"
-                        TextColor="#8999AF" />
-
-                    <Label
-                        Text="Bluetooth scanning and connection management will be implemented in the next development stage."
-                        FontSize="12"
-                        TextColor="#71839B"
-                        LineHeight="1.35" />
-
-                </VerticalStackLayout>
-
-            </Border>
-
-
-            <Label
-                Text="Make sure your EMOTIX360 is powered on and Bluetooth advertising is active."
-                FontSize="11"
-                TextColor="#677B94"
-                HorizontalTextAlignment="Center" />
+            <Label Text="Keep EMOTIX360 powered on and within Bluetooth range while connecting."
+                   FontSize="11" TextColor="#677B94"
+                   HorizontalTextAlignment="Center" />
 
         </VerticalStackLayout>
-
     </ScrollView>
-
 </ContentPage>
