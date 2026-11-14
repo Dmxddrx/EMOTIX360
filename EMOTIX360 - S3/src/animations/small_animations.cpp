@@ -2267,6 +2267,38 @@ Effect getEffect()
 }
 
 // ------------------------------------------------------------
+// SET BASE BRIGHTNESS
+// ------------------------------------------------------------
+
+void setBaseBrightness(uint8_t brightness)
+{
+    if (brightness > 15) {
+        brightness = 15;
+    }
+
+    // Update both animation brightness references.
+    heartBaseBrightness = brightness;
+    startupBaseBrightness = brightness;
+
+    // If the module is not running, retain the new base
+    // for its next initialization.
+    if (!initialized) {
+        return;
+    }
+
+    // HEART and STARTUP calculate their own live intensity.
+    // Their next update will apply the new base smoothly.
+    if (currentEffect == Effect::STARTUP ||
+        currentEffect == Effect::HEART)
+    {
+        return;
+    }
+
+    // RAIN and WAVES do not have independent brightness pulses.
+    MAX7219_SetBrightness(brightness);
+}
+
+// ------------------------------------------------------------
 // UPDATE
 // ------------------------------------------------------------
 

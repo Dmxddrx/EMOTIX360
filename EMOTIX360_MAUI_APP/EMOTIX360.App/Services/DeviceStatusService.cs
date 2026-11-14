@@ -1,4 +1,5 @@
 using EMOTIX360.App.Models;
+using System.Diagnostics;
 
 namespace EMOTIX360.App.Services;
 
@@ -22,13 +23,27 @@ public sealed class DeviceStatusService
 
     private void OnStatusPayloadReceived(string payload)
     {
+        Debug.WriteLine(
+            $"[EMOTIX360 BLE] Status received: {payload}"
+        );
+
         if (!DeviceStatus.TryParse(payload, out DeviceStatus status))
         {
+            Debug.WriteLine(
+                "[EMOTIX360 BLE] Status parsing failed."
+            );
+
             UnparsedPayloadReceived?.Invoke(payload);
             return;
         }
 
         Current = status;
+
+        Debug.WriteLine(
+            $"[EMOTIX360 BLE] Parsed MODE={status.Mode}, " +
+            $"BRIGHT={status.Brightness}, WIFI={status.WifiConnected}"
+        );
+
         StatusUpdated?.Invoke(status);
     }
 

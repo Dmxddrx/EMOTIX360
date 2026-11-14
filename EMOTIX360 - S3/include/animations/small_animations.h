@@ -32,6 +32,12 @@ bool nextEffect();
 // Get the current effect.
 Effect getEffect();
 
+// Set the user-selected base brightness.
+//
+// HEART and STARTUP retain their own brightness animation,
+// using the supplied value as their brightness reference.
+void setBaseBrightness(uint8_t brightness);
+
 // Stop the small-animation sequence.
 void end();
 

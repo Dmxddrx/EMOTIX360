@@ -40,6 +40,16 @@ TaskHandle_t animationTaskHandle = nullptr;
 
 bool initialized = false;
 
+// ------------------------------------------------------------
+// MOBILE APP BRIGHTNESS CONFIGURATION
+// ------------------------------------------------------------
+
+// User-selected base brightness, range 0..15.
+//
+// SmallAnimations uses this value as its brightness reference.
+// Its heartbeat and startup effects can still pulse normally.
+
+uint8_t configuredBrightness = 5;
 
 // ------------------------------------------------------------
 // MODE NAME HELPER
@@ -128,41 +138,40 @@ SmallAnimations::Effect getSmallAnimationEffect(Mode mode)
     }
 }
 
-// ------------------------------------------------------------
-// PUBLISH DEVICE STATUS TO MOBILE APP
-// ------------------------------------------------------------
+// ============================================================
+// DEVICE STATUS PUBLISHER
+// ============================================================
 
 /*
- * Publish a read-only snapshot of EMOTIX360.
+ * Publishes the actual device state to the connected app.
  *
- * The AnimationManager owns the active mode, so it is the
- * correct place to obtain the current animation name.
+ * The active animation mode comes directly from the
+ * AnimationManager task.
  *
- * Brightness is READ ONLY here.
- * The current MAX7219 intensity is reported, but never changed.
+ * Brightness reports the configured base level, rather
+ * than the instantaneous heartbeat pulse intensity.
+ *
+ * No animation or display state is modified here.
  */
-void publishDeviceStatus(Mode activeMode)
+
+bool publishDeviceStatus(Mode activeMode)
 {
     MPU6050::Data imu{};
 
-    // Do not publish incomplete sensor data.
     if (!MPU6050::getData(imu) || !imu.valid) {
-        return;
+        return false;
     }
 
     BluetoothManager::setStatus(
         imu.pitchDeg,
         imu.rollDeg,
-
         WifiManager::isConnected(),
-
         WifiManager::isTimeValid(),
-
         getModeName(activeMode),
-
-        // Read current hardware intensity only.
-        MAX7219_GetBrightness()
+        configuredBrightness
     );
+
+    return true;
 }
 
 // ------------------------------------------------------------
@@ -340,6 +349,30 @@ void applyMode(Mode newMode, Mode &activeMode)
         }
     }
 
+    // --------------------------------------------------------
+    // RESTORE THE CONFIGURED BRIGHTNESS BASE
+    // --------------------------------------------------------
+
+    /*
+    * Every mode transition must retain the mobile app's
+    * configured brightness.
+    *
+    * SmallAnimations handles its own dynamic brightness.
+    * Other modes use the MAX7219 intensity directly.
+    */
+
+    if (isSmallAnimationMode(newMode))
+    {
+        SmallAnimations::setBaseBrightness(
+            configuredBrightness
+        );
+    }
+    else
+    {
+        MAX7219_SetBrightness(
+            configuredBrightness
+        );
+    }
 
     // Update the active mode.
     activeMode = newMode;
@@ -349,6 +382,258 @@ void applyMode(Mode newMode, Mode &activeMode)
         getModeName(newMode),
         (unsigned int)newMode
     );
+}
+
+
+// ============================================================
+// BLUETOOTH COMMAND DISPATCHER
+// ============================================================
+
+// ------------------------------------------------------------
+// PARSE ANIMATION MODE
+// ------------------------------------------------------------
+
+bool parseBluetoothMode(
+    const char *value,
+    Mode &mode
+)
+{
+    if (value == nullptr) {
+        return false;
+    }
+
+    if (strcmp(value, "IDLE") == 0) {
+        mode = Mode::IDLE;
+    }
+    else if (strcmp(value, "SAND_CLOCK") == 0) {
+        mode = Mode::SAND_CLOCK;
+    }
+    else if (strcmp(value, "WATER") == 0) {
+        mode = Mode::WATER;
+    }
+    else if (strcmp(value, "SAND_GRAVITY") == 0) {
+        mode = Mode::SAND_GRAVITY;
+    }
+    else if (strcmp(value, "HEART") == 0) {
+        mode = Mode::HEART;
+    }
+    else if (strcmp(value, "RAIN") == 0) {
+        mode = Mode::RAIN;
+    }
+    else if (strcmp(value, "WAVES") == 0) {
+        mode = Mode::WAVES;
+    }
+    else {
+        return false;
+    }
+
+    // STARTUP is intentionally excluded.
+    // It remains a one-time boot animation.
+
+    return true;
+}
+
+
+// ------------------------------------------------------------
+// APPLY MOBILE APP BRIGHTNESS
+// ------------------------------------------------------------
+
+void applyBluetoothBrightness(uint8_t brightness, Mode activeMode)
+{
+    if (brightness > 15) {
+        brightness = 15;
+    }
+
+    configuredBrightness = brightness;
+
+    // Update the base brightness used by SmallAnimations.
+    //
+    // HEART and STARTUP will continue their own brightness
+    // animation using the newly selected base value.
+    //
+    // RAIN and WAVES have no independent brightness pulse,
+    // so SmallAnimations applies the selected intensity directly.
+
+    SmallAnimations::setBaseBrightness(brightness);
+
+    // Other animation modules use the MAX7219 intensity directly.
+    if (!isSmallAnimationMode(activeMode)) {
+        MAX7219_SetBrightness(brightness);
+    }
+
+    Serial.printf(
+        "[BLE] Brightness override applied: %u/15\n",
+        brightness
+    );
+}
+
+
+// ------------------------------------------------------------
+// PROCESS PENDING BLUETOOTH COMMAND
+// ------------------------------------------------------------
+
+/*
+ * Called only from AnimationManager::animationTask().
+ *
+ * Supported commands:
+ *
+ *     MODE=IDLE
+ *     MODE=SAND_CLOCK
+ *     MODE=WATER
+ *     MODE=SAND_GRAVITY
+ *     MODE=HEART
+ *     MODE=RAIN
+ *     MODE=WAVES
+ *
+ *     BRIGHT=0 ... BRIGHT=15
+ *
+ * The existing BluetoothManager callback only receives
+ * and stores commands. This function actually executes them.
+ *
+ * Returns true when a command has been consumed.
+ */
+
+bool processBluetoothCommand(Mode &activeMode)
+{
+    char command[48] = {};
+
+    if (!BluetoothManager::takeCommand(
+            command,
+            sizeof(command)))
+    {
+        return false;
+    }
+
+    // Remove trailing line endings and whitespace.
+    size_t length = strlen(command);
+
+    while (length > 0)
+    {
+        const char last = command[length - 1];
+
+        if (last == '\r' ||
+            last == '\n' ||
+            last == ' ' ||
+            last == '\t')
+        {
+            command[--length] = '\0';
+        }
+        else
+        {
+            break;
+        }
+    }
+
+    if (length == 0) {
+        return true;
+    }
+
+
+    // --------------------------------------------------------
+    // ANIMATION MODE OVERRIDE
+    // --------------------------------------------------------
+
+    if (strncmp(command, "MODE=", 5) == 0)
+    {
+        Mode requestedMode;
+
+        const char *modeValue = command + 5;
+
+        if (!parseBluetoothMode(modeValue, requestedMode))
+        {
+            Serial.printf(
+                "[BLE] Invalid animation mode: %s\n",
+                modeValue
+            );
+
+            return true;
+        }
+
+        // The AnimationManager task owns the matrix,
+        // so apply the mode directly from this task.
+        applyMode(requestedMode, activeMode);
+
+        if (activeMode == requestedMode)
+        {
+            Serial.printf(
+                "[BLE] Command applied: MODE=%s\n",
+                getModeName(activeMode)
+            );
+        }
+        else
+        {
+            Serial.println(
+                "[BLE] Animation mode override failed"
+            );
+        }
+
+        return true;
+    }
+
+
+    // --------------------------------------------------------
+    // BRIGHTNESS OVERRIDE
+    // --------------------------------------------------------
+
+    if (strncmp(command, "BRIGHT=", 7) == 0)
+    {
+        const char *value = command + 7;
+
+        if (*value == '\0')
+        {
+            Serial.println("[BLE] Invalid brightness command");
+            return true;
+        }
+
+        // Accept decimal digits only.
+        for (const char *p = value; *p != '\0'; ++p)
+        {
+            if (*p < '0' || *p > '9')
+            {
+                Serial.println("[BLE] Invalid brightness value");
+                return true;
+            }
+        }
+
+        char *endPointer = nullptr;
+
+        const long brightness = strtol(
+            value,
+            &endPointer,
+            10
+        );
+
+        if (endPointer == value ||
+            *endPointer != '\0' ||
+            brightness < 0 ||
+            brightness > 15)
+        {
+            Serial.println(
+                "[BLE] Brightness must be between 0 and 15"
+            );
+
+            return true;
+        }
+
+        applyBluetoothBrightness(
+            static_cast<uint8_t>(brightness),
+            activeMode
+        );
+
+        return true;
+    }
+
+
+    // --------------------------------------------------------
+    // UNKNOWN COMMAND
+    // --------------------------------------------------------
+
+    Serial.printf(
+        "[BLE] Unsupported command: %s\n",
+        command
+    );
+
+    return true;
 }
 
 
@@ -362,7 +647,11 @@ void animationTask(void *parameter)
 
     Mode activeMode = Mode::IDLE;
     Mode requestedMode = Mode::IDLE;
+
+    // BLE STATUS TRACKING
     uint32_t lastStatusPublishMs = 0;
+    Mode lastPublishedMode = Mode::IDLE;
+    bool statusModeInitialized = false;
 
     // Apply the initial mode selected during begin().
     if (xQueueReceive(modeQueue, &requestedMode, 0) == pdTRUE) {
@@ -381,13 +670,66 @@ void animationTask(void *parameter)
 
     while (true)
     {
-        // Check whether another module requested a mode change.
-        // The queue holds only the latest requested mode.
-        if (xQueueReceive(modeQueue, &requestedMode, 0) == pdTRUE) {
+
+        // PROCESS PHYSICAL BUTTON MODE REQUEST
+        if (xQueueReceive(modeQueue, &requestedMode, 0) == pdTRUE)
+        {
             applyMode(requestedMode, activeMode);
         }
 
+
+        // PROCESS MOBILE APP BLE COMMAND
+        const bool bluetoothCommandProcessed =
+            processBluetoothCommand(activeMode);
+      
+        // PUBLISH DEVICE STATUS
         const uint32_t nowMs = millis();
+
+        const bool modeChanged =
+            !statusModeInitialized ||
+            activeMode != lastPublishedMode;
+
+        const bool statusIntervalElapsed =
+            (uint32_t)(nowMs - lastStatusPublishMs) >=
+            DEVICE_STATUS_PUBLISH_INTERVAL_MS;
+
+
+        // Publish immediately after:
+        //     - A physical button mode change.
+        //     - A mobile app command.
+        //     - The regular one-second interval.
+
+        if (bluetoothCommandProcessed ||
+            modeChanged ||
+            statusIntervalElapsed)
+        {
+            const bool statusReady =
+                publishDeviceStatus(activeMode);
+
+            lastStatusPublishMs = nowMs;
+
+            lastPublishedMode = activeMode;
+
+            statusModeInitialized = true;
+
+            if (statusReady &&
+                BluetoothManager::isConnected() &&
+                (bluetoothCommandProcessed || modeChanged))
+            {
+                Serial.printf(
+                    "[BLE] Device status published: MODE=%s, BRIGHT=%u\n",
+                    getModeName(activeMode),
+                    configuredBrightness
+                );
+            }
+
+            if (!statusReady && modeChanged)
+            {
+                Serial.println(
+                    "[BLE] Status pending: MPU6050 data unavailable"
+                );
+            }
+        }
 
         // Publish a live device snapshot every second.
         // This does not modify the display or animation brightness.
@@ -478,6 +820,9 @@ bool begin(Mode initialMode)
     if (initialized) {
         return true;
     }
+
+    // Capture the MAX7219's initial user brightness.
+    configuredBrightness = MAX7219_GetBrightness();
 
     // A one-element queue stores the latest requested mode.
     modeQueue = xQueueCreate(1, sizeof(Mode));

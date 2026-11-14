@@ -13,6 +13,10 @@
 #include <freertos/task.h>
 #include <freertos/portmacro.h>
 
+#if defined(CONFIG_BLUEDROID_ENABLED)
+#include <BLE2902.h>
+#endif
+
 
 namespace BluetoothManager {
 namespace {
@@ -319,6 +323,15 @@ bool begin()
             BLECharacteristic::PROPERTY_READ |
             BLECharacteristic::PROPERTY_NOTIFY
         );
+
+    #if defined(CONFIG_BLUEDROID_ENABLED)
+    // Client Characteristic Configuration Descriptor.
+    // Allows Android applications to subscribe to notifications.
+
+    statusCharacteristic->addDescriptor(
+        new BLE2902()
+    );
+    #endif
 
     if (statusCharacteristic == nullptr)
     {
