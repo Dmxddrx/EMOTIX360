@@ -13,6 +13,7 @@ public sealed class DeviceViewModel : ObservableObject
     private bool _isScanning;
     private bool _isConnecting;
     private bool _isConnected;
+    private bool _scanStoppedForConnection;
     private ModelDeviceInfo? _selectedDevice;
     private string _statusMessage = "Scan to find your nearby EMOTIX360.";
 
@@ -89,7 +90,10 @@ public sealed class DeviceViewModel : ObservableObject
     public string ConnectionText => IsConnected ? "Connected" : "Not connected";
     public string ScanButtonText => IsScanning ? "SCANNING..." : "SCAN FOR EMOTIX360";
     public bool CanScan => !IsScanning && !IsConnecting && !IsConnected;
-    public bool CanConnectSelected => SelectedDevice is not null && !IsScanning && !IsConnecting && !IsConnected;
+    public bool CanConnectSelected =>
+        SelectedDevice is not null &&
+        !IsConnecting &&
+        !IsConnected;
 
     private async Task ScanAsync()
     {
@@ -98,23 +102,35 @@ public sealed class DeviceViewModel : ObservableObject
 
         Devices.Clear();
         SelectedDevice = null;
+
+        _scanStoppedForConnection = false;
+
         IsScanning = true;
+
         StatusMessage = "Searching for EMOTIX360 (10 seconds)...";
 
         try
         {
             await _bluetooth.ScanAsync(TimeSpan.FromSeconds(10));
-            StatusMessage = Devices.Count > 0
-                ? $"Found {Devices.Count} EMOTIX360 device(s). Select one to connect."
-                : "No EMOTIX360 device found. Check that the ESP32-S3 is powered on and advertising.";
+
+            // Connecting may have stopped the scan early.
+            // In that case, ConnectSelectedAsync owns the status message.
+            if (!_scanStoppedForConnection)
+            {
+                StatusMessage = Devices.Count > 0
+                    ? $"Found {Devices.Count} EMOTIX360 device(s). Select one to connect."
+                    : "No EMOTIX360 device found. Check that the ESP32-S3 is powered on and advertising.";
+            }
         }
         catch (UnauthorizedAccessException ex)
         {
-            StatusMessage = ex.Message;
+            if (!_scanStoppedForConnection)
+                StatusMessage = ex.Message;
         }
         catch (Exception ex)
         {
-            StatusMessage = $"Bluetooth scan failed: {ex.Message}";
+            if (!_scanStoppedForConnection)
+                StatusMessage = $"Bluetooth scan failed: {ex.Message}";
         }
         finally
         {
@@ -126,6 +142,8 @@ public sealed class DeviceViewModel : ObservableObject
     {
         if (SelectedDevice is null || !CanConnectSelected)
             return;
+
+        _scanStoppedForConnection = IsScanning;
 
         IsConnecting = true;
         StatusMessage = $"Connecting to {SelectedDevice.Name}...";

@@ -6,6 +6,7 @@ using Plugin.BLE.Abstractions;
 using Plugin.BLE.Abstractions.Contracts;
 using Plugin.BLE.Abstractions.EventArgs;
 using ModelDeviceInfo = EMOTIX360.App.Models.DeviceInfo;
+using System.Threading;
 
 namespace EMOTIX360.App.Services;
 
@@ -36,6 +37,21 @@ public sealed class BluetoothService
     private ICharacteristic? _commandCharacteristic;
     private ICharacteristic? _statusCharacteristic;
     private EventHandler<CharacteristicUpdatedEventArgs>? _statusUpdatedHandler;
+
+    // --------------------------------------------------------
+    // BLE CONNECTION WATCHDOG
+    // --------------------------------------------------------
+
+    // Firmware normally sends a status notification every 1 second.
+    // Six seconds allows several missed notifications before
+    // considering the connection lost.
+
+    private static readonly TimeSpan STATUS_TIMEOUT =
+        TimeSpan.FromSeconds(6);
+
+    private CancellationTokenSource? _heartbeatMonitorCts;
+
+    private long _lastStatusReceivedUtcTicks;
 
     public BluetoothService()
     {
@@ -214,6 +230,8 @@ public sealed class BluetoothService
             }
 
             ConnectionChanged?.Invoke(true, device.Name);
+            // Start monitoring incoming ESP32 status notifications.
+            StartHeartbeatMonitor();
         }
         catch
         {
@@ -342,13 +360,28 @@ public sealed class BluetoothService
         );
     }
 
-    private void OnDeviceDisconnected(object? sender, DeviceEventArgs args)
+    private void OnDeviceDisconnected(
+    object? sender,
+    DeviceEventArgs args)
     {
         if (_connectedDevice?.Id != args.Device.Id)
             return;
 
+        // Remove the status notification handler from the
+        // disconnected characteristic.
+        if (_statusCharacteristic is not null &&
+            _statusUpdatedHandler is not null)
+        {
+            _statusCharacteristic.ValueUpdated -=
+                _statusUpdatedHandler;
+        }
+
         ClearConnectionState();
-        ConnectionChanged?.Invoke(false, "The device disconnected.");
+
+        ConnectionChanged?.Invoke(
+            false,
+            "The device disconnected."
+        );
     }
 
     private void OnStatusCharacteristicUpdated(object? sender, CharacteristicUpdatedEventArgs args)
@@ -361,9 +394,19 @@ public sealed class BluetoothService
         if (bytes is null || bytes.Length == 0)
             return;
 
-        string payload = Encoding.UTF8.GetString(bytes).Trim('\0', '\r', '\n', ' ');
+        // Record that the ESP32 is still communicating.
+        Interlocked.Exchange(
+            ref _lastStatusReceivedUtcTicks,
+            DateTime.UtcNow.Ticks
+        );
+
+        string payload = Encoding.UTF8.GetString(bytes)
+            .Trim('\0', '\r', '\n', ' ');
+
         if (!string.IsNullOrWhiteSpace(payload))
+        {
             StatusPayloadReceived?.Invoke(payload);
+        }
     }
 
     private async Task DisconnectAfterFailedConnectAsync(IDevice device)
@@ -389,8 +432,204 @@ public sealed class BluetoothService
         }
     }
 
+
+    // ========================================================
+    // BLE CONNECTION WATCHDOG
+    // ========================================================
+
+    private void StartHeartbeatMonitor()
+    {
+        StopHeartbeatMonitor();
+
+        Interlocked.Exchange(
+            ref _lastStatusReceivedUtcTicks,
+            DateTime.UtcNow.Ticks
+        );
+
+        var source = new CancellationTokenSource();
+
+        Interlocked.Exchange(
+            ref _heartbeatMonitorCts,
+            source
+        );
+
+        _ = MonitorHeartbeatAsync(source);
+    }
+
+
+    private void StopHeartbeatMonitor()
+    {
+        var source = Interlocked.Exchange(
+            ref _heartbeatMonitorCts,
+            null
+        );
+
+        if (source is not null)
+        {
+            try
+            {
+                source.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Monitor already finished.
+            }
+        }
+    }
+
+
+    // --------------------------------------------------------
+    // MONITOR INCOMING STATUS
+    // --------------------------------------------------------
+
+    private async Task MonitorHeartbeatAsync(
+        CancellationTokenSource source)
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(
+                TimeSpan.FromSeconds(1)
+            );
+
+            while (await timer.WaitForNextTickAsync(source.Token))
+            {
+                // No active connection.
+                if (_connectedDevice is null)
+                    return;
+
+                long lastReceivedTicks =
+                    Interlocked.Read(
+                        ref _lastStatusReceivedUtcTicks
+                    );
+
+                if (lastReceivedTicks == 0)
+                    continue;
+
+                long elapsedTicks =
+                    DateTime.UtcNow.Ticks - lastReceivedTicks;
+
+                if (elapsedTicks >= STATUS_TIMEOUT.Ticks)
+                {
+                    Debug.WriteLine(
+                        "[BLE] Status heartbeat timeout. " +
+                        "Connection considered lost."
+                    );
+
+                    await HandleHeartbeatTimeoutAsync(source.Token);
+
+                    return;
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected during a manual or unexpected disconnect.
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(
+                $"[BLE] Heartbeat monitor error: {ex.Message}"
+            );
+        }
+        finally
+        {
+            Interlocked.CompareExchange(
+                ref _heartbeatMonitorCts,
+                null,
+                source
+            );
+
+            source.Dispose();
+        }
+    }
+
+
+    // --------------------------------------------------------
+    // HANDLE HEARTBEAT TIMEOUT
+    // --------------------------------------------------------
+
+    private async Task HandleHeartbeatTimeoutAsync(
+        CancellationToken cancellationToken)
+    {
+        IDevice? lostDevice = null;
+
+        await _gattSemaphore.WaitAsync(cancellationToken);
+
+        try
+        {
+            IDevice? device = _connectedDevice;
+
+            if (device is null)
+                return;
+
+            // Recheck before clearing the connection.
+            long lastReceivedTicks =
+                Interlocked.Read(
+                    ref _lastStatusReceivedUtcTicks
+                );
+
+            if (lastReceivedTicks != 0 &&
+                DateTime.UtcNow.Ticks - lastReceivedTicks
+                    < STATUS_TIMEOUT.Ticks)
+            {
+                return;
+            }
+
+            lostDevice = device;
+
+            // Remove the notification callback.
+            if (_statusCharacteristic is not null &&
+                _statusUpdatedHandler is not null)
+            {
+                _statusCharacteristic.ValueUpdated -=
+                    _statusUpdatedHandler;
+            }
+
+            // Clear all local connection references.
+            ClearConnectionState();
+
+            Debug.WriteLine(
+                "[BLE] EMOTIX360 connection lost."
+            );
+
+            // Notify HomeViewModel and DeviceViewModel.
+            ConnectionChanged?.Invoke(
+                false,
+                "EMOTIX360 disconnected. Device is powered off or out of range."
+            );
+        }
+        finally
+        {
+            _gattSemaphore.Release();
+        }
+
+        // Request cleanup of the stale peripheral connection.
+        // This is best-effort because the device may already be off.
+        if (lostDevice is not null)
+        {
+            try
+            {
+                await _adapter.DisconnectDeviceAsync(lostDevice);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    $"[BLE] Disconnection cleanup: {ex.Message}"
+                );
+            }
+        }
+    }
+
+
     private void ClearConnectionState()
     {
+        StopHeartbeatMonitor();
+
+        Interlocked.Exchange(
+            ref _lastStatusReceivedUtcTicks,
+            0
+        );
+
         _connectedDevice = null;
         _commandCharacteristic = null;
         _statusCharacteristic = null;

@@ -8,6 +8,228 @@
     BackgroundColor="#0B111B"
     Shell.NavBarIsVisible="False">
 
+    <ContentPage.Resources>
+        <ResourceDictionary>
+
+            <!-- NORMAL ANIMATION TILE -->
+            <Style
+            x:Key="AnimationTileBorderStyle"
+            TargetType="Border">
+
+                <Setter Property="BackgroundColor"
+                    Value="#121C2B" />
+
+                <Setter Property="Stroke"
+                    Value="#26364A" />
+
+                <Setter Property="StrokeThickness"
+                    Value="1" />
+
+                <Setter Property="Padding"
+                    Value="13" />
+
+                <Style.Triggers>
+
+                    <!-- IDLE -->
+                    <DataTrigger
+                    TargetType="Border"
+                    Binding="{Binding HighlightedModeKey}"
+                    Value="IDLE">
+
+                        <Setter Property="BackgroundColor"
+                            Value="#17253A" />
+
+                        <Setter Property="Stroke"
+                            Value="#5796FF" />
+
+                    </DataTrigger>
+
+                    <!-- SAND CLOCK -->
+                    <DataTrigger
+                    TargetType="Border"
+                    Binding="{Binding HighlightedModeKey}"
+                    Value="SAND_CLOCK">
+
+                        <Setter Property="BackgroundColor"
+                            Value="#17253A" />
+
+                        <Setter Property="Stroke"
+                            Value="#5796FF" />
+
+                    </DataTrigger>
+
+                    <!-- WATER -->
+                    <DataTrigger
+                    TargetType="Border"
+                    Binding="{Binding HighlightedModeKey}"
+                    Value="WATER">
+
+                        <Setter Property="BackgroundColor"
+                            Value="#17253A" />
+
+                        <Setter Property="Stroke"
+                            Value="#5796FF" />
+
+                    </DataTrigger>
+
+                    <!-- SAND GRAVITY -->
+                    <DataTrigger
+                    TargetType="Border"
+                    Binding="{Binding HighlightedModeKey}"
+                    Value="SAND_GRAVITY">
+
+                        <Setter Property="BackgroundColor"
+                            Value="#17253A" />
+
+                        <Setter Property="Stroke"
+                            Value="#5796FF" />
+
+                    </DataTrigger>
+
+                    <!-- HEART -->
+                    <DataTrigger
+                    TargetType="Border"
+                    Binding="{Binding HighlightedModeKey}"
+                    Value="HEART">
+
+                        <Setter Property="BackgroundColor"
+                            Value="#17253A" />
+
+                        <Setter Property="Stroke"
+                            Value="#5796FF" />
+
+                    </DataTrigger>
+
+                    <!-- RAIN -->
+                    <DataTrigger
+                    TargetType="Border"
+                    Binding="{Binding HighlightedModeKey}"
+                    Value="RAIN">
+
+                        <Setter Property="BackgroundColor"
+                            Value="#17253A" />
+
+                        <Setter Property="Stroke"
+                            Value="#5796FF" />
+
+                    </DataTrigger>
+
+                    <!-- WAVES -->
+                    <DataTrigger
+                    TargetType="Border"
+                    Binding="{Binding HighlightedModeKey}"
+                    Value="WAVES">
+
+                        <Setter Property="BackgroundColor"
+                            Value="#17253A" />
+
+                        <Setter Property="Stroke"
+                            Value="#5796FF" />
+
+                    </DataTrigger>
+
+                </Style.Triggers>
+            </Style>
+
+
+            <!-- ANIMATION TILE TEXT -->
+            <Style
+            x:Key="AnimationTileLabelStyle"
+            TargetType="Label">
+
+                <Setter Property="TextColor"
+                    Value="#C4D0E0" />
+
+                <Setter Property="FontSize"
+                    Value="12" />
+
+                <Setter Property="FontAttributes"
+                    Value="Bold" />
+
+                <Setter Property="HorizontalTextAlignment"
+                    Value="Center" />
+
+                <Setter Property="VerticalTextAlignment"
+                    Value="Center" />
+
+                <Style.Triggers>
+
+                    <DataTrigger
+                    TargetType="Label"
+                    Binding="{Binding HighlightedModeKey}"
+                    Value="IDLE">
+
+                        <Setter Property="TextColor"
+                            Value="#8EB6FF" />
+
+                    </DataTrigger>
+
+                    <DataTrigger
+                    TargetType="Label"
+                    Binding="{Binding HighlightedModeKey}"
+                    Value="SAND_CLOCK">
+
+                        <Setter Property="TextColor"
+                            Value="#8EB6FF" />
+
+                    </DataTrigger>
+
+                    <DataTrigger
+                    TargetType="Label"
+                    Binding="{Binding HighlightedModeKey}"
+                    Value="WATER">
+
+                        <Setter Property="TextColor"
+                            Value="#8EB6FF" />
+
+                    </DataTrigger>
+
+                    <DataTrigger
+                    TargetType="Label"
+                    Binding="{Binding HighlightedModeKey}"
+                    Value="SAND_GRAVITY">
+
+                        <Setter Property="TextColor"
+                            Value="#8EB6FF" />
+
+                    </DataTrigger>
+
+                    <DataTrigger
+                    TargetType="Label"
+                    Binding="{Binding HighlightedModeKey}"
+                    Value="HEART">
+
+                        <Setter Property="TextColor"
+                            Value="#8EB6FF" />
+
+                    </DataTrigger>
+
+                    <DataTrigger
+                    TargetType="Label"
+                    Binding="{Binding HighlightedModeKey}"
+                    Value="RAIN">
+
+                        <Setter Property="TextColor"
+                            Value="#8EB6FF" />
+
+                    </DataTrigger>
+
+                    <DataTrigger
+                    TargetType="Label"
+                    Binding="{Binding HighlightedModeKey}"
+                    Value="WAVES">
+
+                        <Setter Property="TextColor"
+                            Value="#8EB6FF" />
+
+                    </DataTrigger>
+
+                </Style.Triggers>
+            </Style>
+
+        </ResourceDictionary>
+    </ContentPage.Resources>
+    
     <ScrollView>
         <VerticalStackLayout
             Padding="22,26,22,30"
@@ -394,183 +616,167 @@
                     ColumnSpacing="10"
                     RowSpacing="10">
 
-                    <Border
+                                    <!-- IDLE -->
+                                    <Border
                         Grid.Row="0"
                         Grid.Column="0"
-                        BackgroundColor="#17253A"
-                        Stroke="#5796FF"
-                        StrokeThickness="1"
-                        Padding="13">
+                        Style="{StaticResource AnimationTileBorderStyle}">
 
-                        <Border.StrokeShape>
-                            <RoundRectangle CornerRadius="13" />
-                        </Border.StrokeShape>
+                                        <Border.StrokeShape>
+                                            <RoundRectangle CornerRadius="13" />
+                                        </Border.StrokeShape>
 
-                                                <Border.GestureRecognizers>
-                            <TapGestureRecognizer
+                                        <Border.GestureRecognizers>
+                                            <TapGestureRecognizer
                                 Command="{Binding SelectAnimationCommand}"
                                 CommandParameter="IDLE" />
-                        </Border.GestureRecognizers>
-<Label
+                                        </Border.GestureRecognizers>
+
+                                        <Label
                             Text="IDLE"
-                            TextColor="#8EB6FF"
-                            FontSize="12"
-                            FontAttributes="Bold"
-                            HorizontalTextAlignment="Center" />
+                            Style="{StaticResource AnimationTileLabelStyle}" />
 
-                    </Border>
+                                    </Border>
 
-                    <Border
+
+                                    <!-- SAND CLOCK -->
+                                    <Border
                         Grid.Row="0"
                         Grid.Column="1"
-                        BackgroundColor="#121C2B"
-                        Stroke="#26364A"
-                        Padding="13">
+                        Style="{StaticResource AnimationTileBorderStyle}">
 
-                        <Border.StrokeShape>
-                            <RoundRectangle CornerRadius="13" />
-                        </Border.StrokeShape>
+                                        <Border.StrokeShape>
+                                            <RoundRectangle CornerRadius="13" />
+                                        </Border.StrokeShape>
 
-                                                <Border.GestureRecognizers>
-                            <TapGestureRecognizer
+                                        <Border.GestureRecognizers>
+                                            <TapGestureRecognizer
                                 Command="{Binding SelectAnimationCommand}"
                                 CommandParameter="SAND_CLOCK" />
-                        </Border.GestureRecognizers>
-<Label
+                                        </Border.GestureRecognizers>
+
+                                        <Label
                             Text="SAND CLOCK"
-                            TextColor="#C4D0E0"
-                            FontSize="12"
-                            FontAttributes="Bold"
-                            HorizontalTextAlignment="Center" />
+                            Style="{StaticResource AnimationTileLabelStyle}" />
 
-                    </Border>
+                                    </Border>
 
-                    <Border
+
+                                    <!-- WATER -->
+                                    <Border
                         Grid.Row="1"
                         Grid.Column="0"
-                        BackgroundColor="#121C2B"
-                        Stroke="#26364A"
-                        Padding="13">
+                        Style="{StaticResource AnimationTileBorderStyle}">
 
-                        <Border.StrokeShape>
-                            <RoundRectangle CornerRadius="13" />
-                        </Border.StrokeShape>
+                                        <Border.StrokeShape>
+                                            <RoundRectangle CornerRadius="13" />
+                                        </Border.StrokeShape>
 
-                                                <Border.GestureRecognizers>
-                            <TapGestureRecognizer
+                                        <Border.GestureRecognizers>
+                                            <TapGestureRecognizer
                                 Command="{Binding SelectAnimationCommand}"
                                 CommandParameter="WATER" />
-                        </Border.GestureRecognizers>
-<Label
+                                        </Border.GestureRecognizers>
+
+                                        <Label
                             Text="WATER"
-                            TextColor="#C4D0E0"
-                            FontSize="12"
-                            FontAttributes="Bold"
-                            HorizontalTextAlignment="Center" />
+                            Style="{StaticResource AnimationTileLabelStyle}" />
 
-                    </Border>
+                                    </Border>
 
-                    <Border
+
+                                    <!-- SAND GRAVITY -->
+                                    <Border
                         Grid.Row="1"
                         Grid.Column="1"
-                        BackgroundColor="#121C2B"
-                        Stroke="#26364A"
-                        Padding="13">
+                        Style="{StaticResource AnimationTileBorderStyle}">
 
-                        <Border.StrokeShape>
-                            <RoundRectangle CornerRadius="13" />
-                        </Border.StrokeShape>
+                                        <Border.StrokeShape>
+                                            <RoundRectangle CornerRadius="13" />
+                                        </Border.StrokeShape>
 
-                                                <Border.GestureRecognizers>
-                            <TapGestureRecognizer
+                                        <Border.GestureRecognizers>
+                                            <TapGestureRecognizer
                                 Command="{Binding SelectAnimationCommand}"
                                 CommandParameter="SAND_GRAVITY" />
-                        </Border.GestureRecognizers>
-<Label
+                                        </Border.GestureRecognizers>
+
+                                        <Label
                             Text="SAND GRAVITY"
-                            TextColor="#C4D0E0"
-                            FontSize="12"
-                            FontAttributes="Bold"
-                            HorizontalTextAlignment="Center" />
+                            Style="{StaticResource AnimationTileLabelStyle}" />
 
-                    </Border>
+                                    </Border>
 
-                    <Border
+
+                                    <!-- HEART -->
+                                    <Border
                         Grid.Row="2"
                         Grid.Column="0"
-                        BackgroundColor="#121C2B"
-                        Stroke="#26364A"
-                        Padding="13">
+                        Style="{StaticResource AnimationTileBorderStyle}">
 
-                        <Border.StrokeShape>
-                            <RoundRectangle CornerRadius="13" />
-                        </Border.StrokeShape>
+                                        <Border.StrokeShape>
+                                            <RoundRectangle CornerRadius="13" />
+                                        </Border.StrokeShape>
 
-                                                <Border.GestureRecognizers>
-                            <TapGestureRecognizer
+                                        <Border.GestureRecognizers>
+                                            <TapGestureRecognizer
                                 Command="{Binding SelectAnimationCommand}"
                                 CommandParameter="HEART" />
-                        </Border.GestureRecognizers>
-<Label
+                                        </Border.GestureRecognizers>
+
+                                        <Label
                             Text="HEART"
-                            TextColor="#C4D0E0"
-                            FontSize="12"
-                            FontAttributes="Bold"
-                            HorizontalTextAlignment="Center" />
+                            Style="{StaticResource AnimationTileLabelStyle}" />
 
-                    </Border>
+                                    </Border>
 
-                    <Border
+
+                                    <!-- RAIN -->
+                                    <Border
                         Grid.Row="2"
                         Grid.Column="1"
-                        BackgroundColor="#121C2B"
-                        Stroke="#26364A"
-                        Padding="13">
+                        Style="{StaticResource AnimationTileBorderStyle}">
 
-                        <Border.StrokeShape>
-                            <RoundRectangle CornerRadius="13" />
-                        </Border.StrokeShape>
+                                        <Border.StrokeShape>
+                                            <RoundRectangle CornerRadius="13" />
+                                        </Border.StrokeShape>
 
-                                                <Border.GestureRecognizers>
-                            <TapGestureRecognizer
+                                        <Border.GestureRecognizers>
+                                            <TapGestureRecognizer
                                 Command="{Binding SelectAnimationCommand}"
                                 CommandParameter="RAIN" />
-                        </Border.GestureRecognizers>
-<Label
+                                        </Border.GestureRecognizers>
+
+                                        <Label
                             Text="RAIN"
-                            TextColor="#C4D0E0"
-                            FontSize="12"
-                            FontAttributes="Bold"
-                            HorizontalTextAlignment="Center" />
+                            Style="{StaticResource AnimationTileLabelStyle}" />
 
-                    </Border>
+                                    </Border>
 
-                    <Border
+
+                                    <!-- WAVES -->
+                                    <Border
                         Grid.Row="3"
                         Grid.Column="0"
-                        BackgroundColor="#121C2B"
-                        Stroke="#26364A"
-                        Padding="13">
+                        Style="{StaticResource AnimationTileBorderStyle}">
 
-                        <Border.StrokeShape>
-                            <RoundRectangle CornerRadius="13" />
-                        </Border.StrokeShape>
+                                        <Border.StrokeShape>
+                                            <RoundRectangle CornerRadius="13" />
+                                        </Border.StrokeShape>
 
-                                                <Border.GestureRecognizers>
-                            <TapGestureRecognizer
+                                        <Border.GestureRecognizers>
+                                            <TapGestureRecognizer
                                 Command="{Binding SelectAnimationCommand}"
                                 CommandParameter="WAVES" />
-                        </Border.GestureRecognizers>
-<Label
+                                        </Border.GestureRecognizers>
+
+                                        <Label
                             Text="WAVES"
-                            TextColor="#C4D0E0"
-                            FontSize="12"
-                            FontAttributes="Bold"
-                            HorizontalTextAlignment="Center" />
+                            Style="{StaticResource AnimationTileLabelStyle}" />
 
-                    </Border>
+                                    </Border>
 
-                </Grid>
+                                </Grid>
 
                 <Label
                     Text="{Binding DashboardMessage}"
