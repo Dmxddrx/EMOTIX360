@@ -30,18 +30,25 @@ public sealed class DeviceStatusService
         if (!DeviceStatus.TryParse(payload, out DeviceStatus status))
         {
             Debug.WriteLine(
-                "[EMOTIX360 BLE] Status parsing failed."
+                "[EMOTIX360 BLE] Incomplete or invalid status packet. " +
+                "Previous valid snapshot retained."
             );
 
             UnparsedPayloadReceived?.Invoke(payload);
+
             return;
         }
 
         Current = status;
 
         Debug.WriteLine(
-            $"[EMOTIX360 BLE] Parsed MODE={status.Mode}, " +
-            $"BRIGHT={status.Brightness}, WIFI={status.WifiConnected}"
+            $"[EMOTIX360 BLE] Parsed successfully: " +
+            $"MODE={status.Mode}, " +
+            $"BRIGHT={status.Brightness}, " +
+            $"WIFI={status.WifiConnected}, " +
+            $"TIME={status.TimeValid}, " +
+            $"PITCH={status.PitchDegrees}, " +
+            $"ROLL={status.RollDegrees}"
         );
 
         StatusUpdated?.Invoke(status);

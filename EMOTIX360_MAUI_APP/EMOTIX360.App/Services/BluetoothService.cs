@@ -126,7 +126,49 @@ public sealed class BluetoothService
             await _adapter.ConnectToDeviceAsync(device);
             _connectedDevice = device;
 
-            IService? service = await device.GetServiceAsync(ServiceUuid);
+
+            // --------------------------------------------------------
+            // NEGOTIATE BLE MTU
+            // --------------------------------------------------------
+
+            // ESP32-S3 is configured for MTU 100.
+            // Request the same MTU from the Android central device.
+            //
+            // MTU 100 provides up to 97 bytes of notification data.
+
+#if ANDROID
+            try
+            {
+                int negotiatedMtu = await device.RequestMtuAsync(100);
+
+                Debug.WriteLine(
+                    $"[BLE] ATT MTU negotiated: {negotiatedMtu}"
+                );
+
+                Debug.WriteLine(
+                    $"[BLE] Maximum notification payload: " +
+                    $"{negotiatedMtu - 3} bytes"
+                );
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    $"[BLE] MTU negotiation failed: {ex.Message}"
+                );
+
+                // Continue connecting, but subsequent notifications
+                // might remain limited to the default 20-byte payload.
+            }
+#endif
+
+
+            // --------------------------------------------------------
+            // DISCOVER GATT SERVICE
+            // --------------------------------------------------------
+
+            IService? service =
+                await device.GetServiceAsync(ServiceUuid);
+
             if (service is null)
                 throw new InvalidOperationException("EMOTIX360 BLE service was not found on the connected device.");
 
